@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -19,6 +20,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alfredxing/calc/constants"
+	"github.com/alfredxing/calc/operators"
+	"github.com/alfredxing/calc/operators/functions"
+
+	//	. "github.com/alfredxing/calc/operators"
+	"github.com/alfredxing/calc/compute"
+
+	"github.com/lxn/win"
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
@@ -32,6 +42,15 @@ import (
 
 // 	_ "runtime/cgo"
 
+const GraphMag = 0
+const GraphPhase = 1
+const GraphPhaseDiff = 2
+const GraphRdb = 3
+
+var imgW int64
+var imgH int64
+var MasterMeasure = -1
+
 type measure struct {
 	freq float64
 	mag  float64
@@ -39,14 +58,15 @@ type measure struct {
 }
 
 type Foo struct {
-	Index int
-	Bar   string
-	Baz   float64
-	Quux  time.Time
+	Index  int
+	Bar    string
+	Points int64
+
+	Baz  float64
+	Quux time.Time
 
 	Name    string
 	Date    time.Time
-	Points  int64
 	Comment string
 
 	checked bool
@@ -59,6 +79,8 @@ type FooModel struct {
 	sortOrder  walk.SortOrder
 	items      []*Foo
 }
+
+var model *FooModel
 
 func hash_file_md5(filePath string) (string, error) {
 	var returnMD5String string
@@ -216,6 +238,81 @@ func dbPointsCount(measureID int) int {
 	return 0
 }
 
+func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
+	//xxxxxxxxx
+	//var myexp = "log(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))/(MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))))"
+	//	var myexp = "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))"
+	var idx = 0
+
+	log.Print("HELLO!")
+	// xxxxx
+
+	pts := make(plotter.XYs, dbPointsCount(ds1))
+
+	var (
+		cPh1 = &constants.Constant{
+			Name:  "PhA",
+			Value: 0,
+		}
+		cMag1 = &constants.Constant{
+			Name:  "MagA",
+			Value: 0,
+		}
+		cPh2 = &constants.Constant{
+			Name:  "PhB",
+			Value: 0,
+		}
+		cMag2 = &constants.Constant{
+			Name:  "MagB",
+			Value: 0,
+		}
+	)
+	var freq int64
+	var mag1 float64
+	var ph1 float64
+	var mag2 float64
+	var ph2 float64
+
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+
+	checkErr(err)
+
+	var q = "SELECT m1.freq, m1.magnitude, m1.degrees, m2.magnitude, m2.degrees FROM measure_data as m1 LEFT join measure_data as m2 WHERE m1.freq=m2.freq AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
+	log.Print(q)
+
+	rows, err := db.Query(q)
+	defer rows.Close()
+
+	//	return pts, idx
+
+	for rows.Next() {
+
+		err = rows.Scan(&freq, &mag1, &ph1, &mag2, &ph2)
+		cMag1.Value = mag1
+		cMag2.Value = mag1
+		cPh1.Value = ph1
+		cPh2.Value = ph2
+		constants.Register(cMag1)
+		constants.Register(cMag2)
+		constants.Register(cPh1)
+		constants.Register(cPh2)
+
+		res, err := compute.Evaluate(myexp)
+		if err != nil {
+			log.Print("Error: " + err.Error())
+			return nil, 0
+		} else {
+			//			log.Print("Freq=", freq, " Res=", res)
+			pts[idx].X = float64(freq)
+			pts[idx].Y = res
+			idx++
+		}
+		//		log.Print("Freq=", freq, " Ph1=", ph1, " Ph2=", ph2, " res=", res)
+
+	}
+	return pts, idx
+}
+
 func dbPoints(measureID int, tpe int) plotter.XYs {
 	//	pts := make(plotter.XYs, n)
 	var count = 0
@@ -244,12 +341,15 @@ func dbPoints(measureID int, tpe int) plotter.XYs {
 		//		pts[pidx].X = float64(freq)
 		//		pts[pidx].Y = magnitude
 		pts[pidx].X = float64(freq)
-		pts[pidx].Y = magnitude
+		if tpe == GraphMag {
+			pts[pidx].Y = magnitude
+		} else {
+			pts[pidx].Y = degrees
+		}
 
 		pidx++
 		checkErr(err)
 	}
-
 	//	db.Close()
 	return pts
 }
@@ -299,6 +399,118 @@ func (LogTicks2) Ticks(min, max float64) []Tick {
 	return ticks
 }
 */
+
+func drawModel(mw *MyMainWindow, tpe int) {
+
+	p, err := plot.New()
+	if err != nil {
+		panic(err)
+	}
+	//xxxxxxxxxxxxxxxx
+	if mw.tabWidget.Pages().Len() > 0 {
+		//		mw.tabWidget.Pages().RemoveAt(0)
+	}
+
+	var fname string
+	if tpe == GraphMag {
+		fname = "./mag.png"
+		p.Title.Text = "Magnitude graph"
+		p.X.Label.Text = "Freq"
+		p.Y.Label.Text = "Magnitude (db)"
+
+	} else {
+		fname = "./phase.png"
+		p.Title.Text = "Phase Δ graph"
+		p.X.Label.Text = "Freq"
+		p.Y.Label.Text = "Degrees"
+
+	}
+
+	//
+	//	p.X.Min = 5500000000
+	//	p.X.Max = 6500000000
+	//p.Y.Min = -29
+	//p.Y.Min = -32
+
+	//	var plottingPointArgs []interface{}
+	vs := []interface{}{}
+	// ----------------------- MAGNITUDE -------------------------
+	if tpe == GraphMag {
+		log.Print("-------------------- Magnitude GRAPH---------------------------")
+		for i := range model.items {
+			if model.items[i].checked {
+				log.Print("Add dataset:" + model.items[i].Name)
+				vs = append(vs, model.items[i].Name)
+				vs = append(vs, dbPoints(model.items[i].Index, tpe))
+			}
+		}
+	}
+
+	// ------------------- PHASE DIFF ----------------------------
+	// func dbPointsExpression(ds1 int, ds2 int, exp string) (plotter.XYs, int)
+	if tpe == GraphPhase {
+		log.Print("-------------------- PHASE GRAPH---------------------------")
+		for i := range model.items {
+			if model.items[i].checked && model.items[i].Index != MasterMeasure {
+				log.Print("------Add Phase dataset:" + model.items[i].Name)
+				vs = append(vs, model.items[i].Name)
+				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "phdelta(PhA PhB)")
+				log.Print("Records: ", cnt)
+				vs = append(vs, pts)
+			}
+		}
+		//		return
+	}
+
+	if tpe == GraphRdb {
+		fname = "./r.png"
+		p.Title.Text = "r(db) graph"
+		p.X.Label.Text = "Freq"
+		p.Y.Label.Text = "r(db)"
+
+		log.Print("-------------------- R GRAPH---------------------------")
+		for i := range model.items {
+			if model.items[i].checked && model.items[i].Index != MasterMeasure {
+				log.Print("------Add R dataset:" + model.items[i].Name)
+				vs = append(vs, model.items[i].Name)
+				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))")
+				log.Print("Records: ", cnt)
+				vs = append(vs, pts)
+			}
+		}
+		//		return
+	}
+
+	log.Print("Draw graph...")
+	err = plotutil.AddLines(p,
+		vs...,
+	)
+	if err != nil {
+		log.Print(err)
+		return
+		//panic(err)
+	}
+
+	p.X.Tick.Width = 2
+	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
+	//	p.X.Tick.Marker = commaTicks
+	//p.Y.Tick.Marker = plot.LogTicks{}
+	// plot.ConstantTicks([]plot.Tick{{-31, "0"}, {-30, ""}, {-29, "zzz"}, {75, "-sss"}, {100, "ddd"}})
+
+	p.Add(plotter.NewGrid())
+
+	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
+	// Save the plot to a PNG file.
+
+	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
+	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.70, fname); err != nil {
+		panic(err)
+	}
+
+	openImage(mw, fname, tpe)
+
+}
+
 func draw() {
 	// 1783
 	rand.Seed(int64(0))
@@ -333,9 +545,14 @@ func draw() {
 
 	p.Add(plotter.NewGrid())
 
-	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
+	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
 	// Save the plot to a PNG file.
-	if err := p.Save(15*vg.Inch, 8*vg.Inch, "points.png"); err != nil {
+
+	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
+	//if err := p.Save(vg.Points(float64(imgW))/1, vg.Points(float64(imgH))/1, "points.png"); err != nil {
+	// 100x100 132
+	//
+	if err := p.Save(vg.Points(1452)*0.75, vg.Points(965)*0.75, "points.png"); err != nil {
 
 		panic(err)
 	}
@@ -513,13 +730,13 @@ func (m *FooModel) Value(row, col int) interface{} {
 		return item.Index
 
 	case 1:
-		return item.Bar
+		return item.Name
 
 	case 2:
-		return item.Baz
+		return item.Points
 
 	case 3:
-		return item.Quux
+		return item.Date
 	}
 
 	panic("unexpected col")
@@ -560,7 +777,7 @@ func (m *FooModel) Sort(col int, order walk.SortOrder) error {
 			return c(a.Bar < b.Bar)
 
 		case 2:
-			return c(a.Baz < b.Baz)
+			return c(a.Points < b.Points)
 
 		case 3:
 			return c(a.Quux.Before(b.Quux))
@@ -582,7 +799,7 @@ func (m *FooModel) ResetRows() {
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
-	rows, err := db.Query("SELECT measure_id, name, date, fname, comment FROM measures")
+	rows, err := db.Query("SELECT measure_id, name, date, fname, comment, points FROM measures")
 	checkErr(err)
 
 	defer rows.Close()
@@ -600,20 +817,21 @@ func (m *FooModel) ResetRows() {
 		var points sql.NullInt64
 		var comment sql.NullString
 
-		err = rows.Scan(&measure_id, &name, &date, &fname, &comment)
+		err = rows.Scan(&measure_id, &name, &date, &fname, &comment, &points)
 		checkErr(err)
 
 		//dte, _ := time.Parse("2014-09-12 11:45:26", date.String)
 		log.Print("----", pidx, measure_id)
 		m.items[pidx] = &Foo{
+			checked: false,
 			Index:   measure_id,
 			Name:    name.String,
 			Date:    date,
 			Points:  points.Int64,
 			Comment: comment.String,
-			Bar:     name.String, // strings.Repeat("*", rand.Intn(5)+1),
-			Baz:     rand.Float64() * 1000,
-			Quux:    time.Unix(rand.Int63n(now.Unix()), 0),
+			//			Name:     name.String, // strings.Repeat("*", rand.Intn(5)+1),
+			Baz:  rand.Float64() * 1000,
+			Quux: time.Unix(rand.Int63n(now.Unix()), 0),
 		}
 		//			Quux:    time.Unix(rand.Int63n(now.Unix()), 0),
 
@@ -642,8 +860,44 @@ func (m *FooModel) ResetRows() {
 
 func main() {
 
+	//	dbPointsExpression(759, 760, "test")
+	//	return
+
+	// register math functions
+	var (
+		phdelta = &operators.Operator{
+			Name:          "phdelta",
+			Precedence:    0,
+			Associativity: operators.L,
+			Args:          2,
+			Operation: func(args []float64) float64 {
+				if (math.Abs(args[0] - args[1])) < 180 {
+					//					log.Print("match #1")
+					return math.Abs(args[0] - args[1])
+				} else {
+					//					log.Print("match #2")
+					return 360 - math.Abs(args[0]-args[1])
+				}
+
+			},
+		}
+	)
+	functions.Register(phdelta)
+
+	res, err := compute.Evaluate("phdelta(24 179)")
+
+	if err != nil {
+		return
+	}
+	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
+
+	log.Print(res)
+	//	return
+
 	mw := new(MyMainWindow)
 	var openAction *walk.Action
+	var MagGraphAction *walk.Action
+	var PhaseGraphAction *walk.Action
 	////////////////////////////////
 
 	//	main_z()
@@ -668,7 +922,7 @@ func main() {
 
 	canvas.Dispose()
 
-	model := NewFooModel()
+	model = NewFooModel()
 
 	var tv *walk.TableView
 
@@ -679,6 +933,7 @@ func main() {
 	if err := (MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "RelizIT measures DB",
+
 		MenuItems: []MenuItem{
 			Menu{
 				Text: "&File",
@@ -689,6 +944,19 @@ func main() {
 						Image:       "../img/open.png",
 						OnTriggered: mw.openAction_Triggered,
 					},
+					Action{
+						AssignTo:    &MagGraphAction,
+						Text:        "&Create Graph",
+						Image:       "../img/plus.png",
+						OnTriggered: mw.MagGraphAction_Triggered,
+					},
+					Action{
+						AssignTo:    &PhaseGraphAction,
+						Text:        "&Create ",
+						Image:       "../img/document-properties.png",
+						OnTriggered: mw.PhaseGraphAction_Triggered,
+					},
+
 					Separator{},
 					Action{
 						Text:        "Exit",
@@ -709,9 +977,11 @@ func main() {
 
 		ToolBarItems: []MenuItem{
 			ActionRef{&openAction},
+			ActionRef{&MagGraphAction},
+			ActionRef{&PhaseGraphAction},
 		},
 		MinSize: Size{320, 240},
-		Size:    Size{800, 600},
+		Size:    Size{1200, 600},
 		Layout:  VBox{MarginsZero: true},
 		Children: []Widget{
 			HSplitter{
@@ -719,7 +989,14 @@ func main() {
 				Children: []Widget{
 
 					TabWidget{
+
 						AssignTo: &mw.tabWidget,
+						OnSizeChanged: func() {
+							log.Printf("Main window size changed", mw.tabWidget.Width())
+							imgW = int64(mw.tabWidget.Width())
+							imgH = int64(mw.tabWidget.Height())
+
+						},
 					},
 					TableView{
 						AssignTo:              &tv,
@@ -733,14 +1010,17 @@ func main() {
 							{Title: "Points", Alignment: AlignFar},
 							{Title: "Date", Format: "2006-01-02 15:04:05", Width: 150},
 						},
+
 						StyleCell: func(style *walk.CellStyle) {
 							item := model.items[style.Row()]
 
 							if item.checked {
 								if style.Row()%2 == 0 {
 									style.BackgroundColor = walk.RGB(159, 215, 255)
+									//									style.BackgroundColor = walk.RGB(159, 0, 0)
 								} else {
 									style.BackgroundColor = walk.RGB(143, 199, 239)
+									//									style.BackgroundColor = walk.RGB(159, 0, 255)
 								}
 							}
 
@@ -760,6 +1040,7 @@ func main() {
 								}
 
 							case 2:
+
 								if item.Baz >= 900.0 {
 									style.TextColor = walk.RGB(0, 191, 0)
 									style.Image = goodIcon
@@ -775,8 +1056,27 @@ func main() {
 							}
 						},
 						Model: model,
+						OnCurrentIndexChanged: func() {
+							//							model.ccccccccccccc
+							//							log.Printf("OnCurrentIndexChanged: %v\n", tv.CurrentIndex())
+
+						},
 						OnSelectedIndexesChanged: func() {
-							fmt.Printf("SelectedIndexes: %v\n", tv.SelectedIndexes())
+							//							log.Printf("SelectedIndexes: %v\n", tv.SelectedIndexes())
+							idx := tv.CurrentIndex()
+							if model.Checked(idx) && MasterMeasure != model.items[idx].Index {
+								log.Print("Master measure:"+model.items[idx].Name, "  ", model.items[idx].Index)
+								MasterMeasure = model.items[idx].Index
+							}
+
+							//							checked := model.Checked(idx)
+							//							model.SetChecked(idx, true)
+							//							model.PublishRowChanged(idx)
+						},
+						OnItemActivated: func() {
+							//idx := pg.roleBaseDataTV.CurrentIndex()
+
+							//log.Printf("SelectedIndexes: %v\n", tv.Swi())
 						},
 					},
 				},
@@ -786,31 +1086,59 @@ func main() {
 		log.Fatal(err)
 	}
 
+	//	style := uint32(win.GetWindowLong(mw.MainWindow.Handle(), win.GWL_STYLE))
+	//	style &= win.WS_MAXIMIZE
+	//	style |= win.WS_MAXIMIZE
+
+	//	win.SetWindowLong(mw.MainWindow.Handle(), win.GWL_STYLE, int32(style))
+	///	mw.MainWindow.setAnd
+
+	win.ShowWindow(mw.MainWindow.Handle(), win.SW_SHOWMAXIMIZED)
+
 	lv, err := NewLogView(mw.MainWindow)
 	if err != nil {
 		log.Fatal(err)
 	}
+	//tv.SetWidth(100)
+	//	mw.tabWidget.SetWidth((mw.Width() / 4) * 3)
+	//	mw.tabWidget.SetWidth(1200)
+
+	//	mw.SetFullscreen(true)
+	imgW = int64(mw.tabWidget.Width())
+	imgH = int64(mw.tabWidget.Height())
 
 	//	lv.PostAppendText("Hello!\n")
 	//	lv.PostAppendText("This is a log\n")
 	//	lv.SetClientSize(walk.Size{500, 500})
 	log.SetOutput(lv)
 
+	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH)
+
 	log.Print("|      Showtime         |")
 	log.Print("Database.......... OK", lv)
 	log.Print("Measures.......... ", dbCountMeasures())
 	main_z()
 
-	openImage(mw, "./points.png")
+	//	openImage(mw, "./points.png")
 	//	return
 	//lv.SetClientSize(walk.Size{500, 30})
 	//lv.SetHeight(50)
 	//lv.SetX(50)
 
+	/////////////////
+	/*
+		res, err := compute.Evaluate("sin(1)*15.1/cos(15)")
+		if err != nil {
+			return
+		}
+		fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
+	*/
+	//////////////////
+
 	go func() {
 		for i := 0; i < 10000; i++ {
 			time.Sleep(10000 * time.Millisecond)
-			log.Println("Tic" + "\r\n")
+			//			log.Println("Tic" + "\r\n")
 		}
 	}()
 
@@ -826,6 +1154,49 @@ type MyMainWindow struct {
 func (mw *MyMainWindow) openAction_Triggered() {
 	if err := mw.openImage(); err != nil {
 		log.Print(err)
+	}
+}
+
+func (mw *MyMainWindow) MagGraphAction_Triggered() {
+
+	log.Print("graph action triggered")
+	log.Print(model.items)
+
+	/*
+		if mw.tabWidget.Pages().Len() == 2 {
+			mw.tabWidget.Pages().RemoveAt(0)
+			mw.tabWidget.Pages().RemoveAt(0)
+
+			}*/
+
+	mw.tabWidget.Pages().Clear()
+
+	drawModel(mw, GraphMag)
+	drawModel(mw, GraphPhase)
+	drawModel(mw, GraphRdb)
+	//mw.tabWidget.Pages().At(0).SetCur
+	mw.tabWidget.SetCurrentIndex(0)
+	//win.SendMessage(mw.tabWidget.Handle(), win.TCM_SETCURFOCUS, 0)
+	for i := range model.items {
+		if model.items[i].checked {
+			log.Print(model.items[i].Name, model.items[i].Index)
+			//			zzzzzzzzzz
+
+		}
+	}
+}
+
+func (mw *MyMainWindow) PhaseGraphAction_Triggered() {
+
+	log.Print("graph action triggered")
+	log.Print(model.items)
+	drawModel(mw, GraphPhase)
+	for i := range model.items {
+		if model.items[i].checked {
+			log.Print(model.items[i].Name, model.items[i].Index)
+			//			zzzzzzzzzz
+
+		}
 	}
 }
 
@@ -902,7 +1273,7 @@ func (mw *MyMainWindow) openImage() error {
 	return nil
 }
 
-func openImage(mw *MyMainWindow, fpath string) error {
+func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 
 	img, err := walk.NewImageFromFile(fpath)
 	if err != nil {
@@ -921,9 +1292,20 @@ func openImage(mw *MyMainWindow, fpath string) error {
 		return err
 	}
 
-	if page.SetTitle(path.Base(strings.Replace(fpath, "\\", "/", -1))); err != nil {
-		return err
+	if tpe == GraphMag {
+		page.SetTitle("Magnitude Graph")
+	} else {
+		page.SetTitle("Phase Δ Graph")
 	}
+
+	if tpe == GraphRdb {
+		page.SetTitle("r(db) Graph")
+	}
+	/*
+		if page.SetTitle(path.Base(strings.Replace(fpath, "\\", "/", -1))); err != nil {
+			return err
+		}
+	*/
 	page.SetLayout(walk.NewHBoxLayout())
 
 	defer func() {
@@ -963,5 +1345,5 @@ func openImage(mw *MyMainWindow, fpath string) error {
 }
 
 func (mw *MyMainWindow) aboutAction_Triggered() {
-	walk.MsgBox(mw, "About", "RelizIT RF measures archive", walk.MsgBoxIconInformation)
+	walk.MsgBox(mw, "About", "RelizIT RF measures archive\n\nInput arguments:\nPhA, PhB, MagA, MagB\n\nFunctions list:\nsin, cos, tan, cot, sec, csc,sin, acos, atan, acot, asec, acsc\nabs, log, ln, lg, sqrt, phdelta\n\nOperators:\n+ - neg * / % ^", walk.MsgBoxIconInformation)
 }
