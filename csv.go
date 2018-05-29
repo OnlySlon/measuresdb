@@ -40,6 +40,11 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
+/*
+	#include "./c/dirmon.c"
+*/
+import "C"
+
 // 	_ "runtime/cgo"
 
 const GraphMag = 0
@@ -99,61 +104,6 @@ func hash_file_md5(filePath string) (string, error) {
 
 }
 
-func DataLoad(fname string) []measure {
-	f, _ := os.Open(fname)
-
-	var begins = 0
-	data := make(map[int]measure)
-
-	records := make([]measure, 15000)
-	fmt.Printf("%v\n", data)
-	var ln = ""
-	scanner := bufio.NewScanner(f)
-	scanner.Split(bufio.ScanLines)
-	var point = 0
-	for scanner.Scan() {
-		ln = scanner.Text()
-		split := strings.Split(ln, ",")
-		//		fmt.Printf("%q LENSPLIT=%u\n", strings.Split(ln, ","), len(split))
-		if len(split) == 2 {
-			f := split[0]
-			val := split[1]
-			//			fmt.Println(f)
-			//			fmt.Println(val)
-			freq, err := strconv.ParseFloat(f, 64)
-			if err != nil {
-				continue
-			}
-			mag, err := strconv.ParseFloat(val, 64)
-			if err != nil {
-				continue
-			}
-
-			records[point].freq = freq
-			if records[point].mag != 0 {
-				records[point].deg = mag
-			} else {
-				records[point].mag = mag
-			}
-			point++
-			//records = append(records, s)
-			//			fmt.Printf("%i ", point)
-			///			records[point] = s
-			///data[point] = append(data[point], s)
-		}
-		if ln == "BEGIN" {
-			fmt.Println("\n-------------------------!\n %i", point)
-			point = 0
-			begins++
-
-		}
-		//		fmt.Println(ln)
-
-	}
-	fmt.Printf("%v\n", records)
-	return records
-}
-
 func randomPoints(n int) plotter.XYs {
 	pts := make(plotter.XYs, n)
 	for i := range pts {
@@ -169,7 +119,6 @@ func randomPoints(n int) plotter.XYs {
 }
 
 func dbCountMeasures() int {
-	return 0
 	var output string
 	//	sql.Register("sqlite3", &SQLiteDriver{})
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
@@ -239,12 +188,12 @@ func dbPointsCount(measureID int) int {
 }
 
 func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
-	//xxxxxxxxx
 	//var myexp = "log(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))/(MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))))"
 	//	var myexp = "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))"
 	var idx = 0
-
-	log.Print("HELLO!")
+	// log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))
+	//	myexp := "MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))"
+	log.Print("dbPointsExpression DS1=", ds1, " DS2=", ds2, " EXP="+myexp)
 	// xxxxx
 
 	pts := make(plotter.XYs, dbPointsCount(ds1))
@@ -285,11 +234,12 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 
 	//	return pts, idx
 
+	var nans = 0
 	for rows.Next() {
 
 		err = rows.Scan(&freq, &mag1, &ph1, &mag2, &ph2)
 		cMag1.Value = mag1
-		cMag2.Value = mag1
+		cMag2.Value = mag2
 		cPh1.Value = ph1
 		cPh2.Value = ph2
 		constants.Register(cMag1)
@@ -304,12 +254,21 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 		} else {
 			//			log.Print("Freq=", freq, " Res=", res)
 			pts[idx].X = float64(freq)
+			if math.IsNaN(res) {
+				log.Print("NAN RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+				nans++
+			} else {
+				//				log.Print("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+			}
+
 			pts[idx].Y = res
 			idx++
 		}
+
 		//		log.Print("Freq=", freq, " Ph1=", ph1, " Ph2=", ph2, " res=", res)
 
 	}
+	log.Print("Nan Results: ", nans)
 	return pts, idx
 }
 
@@ -406,7 +365,6 @@ func drawModel(mw *MyMainWindow, tpe int) {
 	if err != nil {
 		panic(err)
 	}
-	//xxxxxxxxxxxxxxxx
 	if mw.tabWidget.Pages().Len() > 0 {
 		//		mw.tabWidget.Pages().RemoveAt(0)
 	}
@@ -609,8 +567,35 @@ func file2db(fpath string) {
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
 	var point = 0
+	var magmode = 0
+	ts := time.Now()
 	for scanner.Scan() {
 		ln = scanner.Text()
+
+		if ln == "BEGIN" {
+			point = 0
+			begins++
+		}
+
+		if ln == "! DATA UNIT dB" {
+			magmode = 0
+		}
+
+		if ln == "! DATA UNIT Lin Mag" {
+			magmode = 1
+		}
+
+		if strings.Index(ln, "! TIMESTAMP ") > -1 {
+			log.Print("GOT TIMESTAMP!!!!!!" + ln)
+			var layout = "! TIMESTAMP Monday, 2 January 2006 15:04:05"
+
+			ts, err = time.Parse(layout, ln)
+
+			if err != nil {
+				fmt.Println("ERROR!!!", err)
+			}
+
+		}
 		split := strings.Split(ln, ",")
 		//		fmt.Printf("%q LENSPLIT=%u\n", strings.Split(ln, ","), len(split))
 		if len(split) == 2 {
@@ -632,7 +617,13 @@ func file2db(fpath string) {
 				records[point].deg = mag
 				records_cnt_mag++
 			} else {
-				records[point].mag = mag
+				if magmode == 1 {
+					records[point].mag = 10 * math.Log10(mag)
+					//					log.Print("Magmode 1 in=", mag, " out=", records[point].mag)
+				} else {
+					records[point].mag = mag
+				}
+
 				records_cnt_phase++
 			}
 			point++
@@ -641,13 +632,6 @@ func file2db(fpath string) {
 			///			records[point] = s
 			///data[point] = append(data[point], s)
 		}
-		if ln == "BEGIN" {
-			//			fmt.Println("\n-------------------------!\n %i", point)
-			point = 0
-			begins++
-
-		}
-		//		fmt.Println(ln)
 
 	}
 
@@ -656,11 +640,12 @@ func file2db(fpath string) {
 		return
 	}
 
-	stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,DateTime('now'),?,?)")
+	//stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,DateTime('now'),?,?)")
+	stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,?,?,?)")
 	checkErr(err)
 
 	log.Print("Insert new MEASURE: hash=" + hash + " name=" + name + " filename=" + filename)
-	res, err := stmt.Exec(hash, name, filename, records_cnt_mag)
+	res, err := stmt.Exec(hash, name, ts, filename, records_cnt_mag)
 	checkErr(err)
 
 	id, err := res.LastInsertId()
@@ -821,7 +806,7 @@ func (m *FooModel) ResetRows() {
 		checkErr(err)
 
 		//dte, _ := time.Parse("2014-09-12 11:45:26", date.String)
-		log.Print("----", pidx, measure_id)
+		//		log.Print("----", pidx, measure_id)
 		m.items[pidx] = &Foo{
 			checked: false,
 			Index:   measure_id,
@@ -900,7 +885,11 @@ func main() {
 	var PhaseGraphAction *walk.Action
 	////////////////////////////////
 
-	//	main_z()
+	main_z()
+	//	MasterMeasure = 1472
+	//	dbPointsExpression(MasterMeasure, 1473, "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))")
+	//	return
+	//////////////
 	//	return
 	boldFont, _ := walk.NewFont("Segoe UI", 9, walk.FontBold)
 	goodIcon, _ := walk.Resources.Icon("../img/check.ico")
@@ -956,7 +945,13 @@ func main() {
 						Image:       "../img/document-properties.png",
 						OnTriggered: mw.PhaseGraphAction_Triggered,
 					},
-
+					Separator{},
+					Action{
+						AssignTo:    &PhaseGraphAction,
+						Text:        "&Options ",
+						Image:       "../img/document-properties.png",
+						OnTriggered: mw.PhaseGraphAction_Triggered,
+					},
 					Separator{},
 					Action{
 						Text:        "Exit",
@@ -964,6 +959,25 @@ func main() {
 					},
 				},
 			},
+
+			Menu{
+				Text: "E&xpressions",
+				Items: []MenuItem{
+					Action{
+						AssignTo:    &openAction,
+						Text:        "Expressions Editor",
+						Image:       "../img/open.png",
+						OnTriggered: mw.openAction_Triggered,
+					},
+					Action{
+						AssignTo:    &MagGraphAction,
+						Text:        "Constants Editor",
+						Image:       "../img/plus.png",
+						OnTriggered: mw.MagGraphAction_Triggered,
+					},
+				},
+			},
+
 			Menu{
 				Text: "&Help",
 				Items: []MenuItem{
@@ -1110,14 +1124,14 @@ func main() {
 	//	lv.PostAppendText("Hello!\n")
 	//	lv.PostAppendText("This is a log\n")
 	//	lv.SetClientSize(walk.Size{500, 500})
+
 	log.SetOutput(lv)
 
-	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH)
+	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH, lv)
 
 	log.Print("|      Showtime         |")
-	log.Print("Database.......... OK", lv)
+	log.Print("Database.......... OK")
 	log.Print("Measures.......... ", dbCountMeasures())
-	main_z()
 
 	//	openImage(mw, "./points.png")
 	//	return
@@ -1136,6 +1150,11 @@ func main() {
 	//////////////////
 
 	go func() {
+		// wwwwwwwwwwwwwwwwwwww
+		log.Print("Directory monitor started.")
+		C.WatchDirectory(C.CString("C:\\MY\\Z"))
+		//C.WatchDirectory((*C.char)((syscall.StringToUTF16Ptr("C:\\MY\\Z"))))
+		//		syscall.StringToUTF16Ptr
 		for i := 0; i < 10000; i++ {
 			time.Sleep(10000 * time.Millisecond)
 			//			log.Println("Tic" + "\r\n")
