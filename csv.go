@@ -8,13 +8,13 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"image/color"
 	"io"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -104,20 +104,6 @@ func hash_file_md5(filePath string) (string, error) {
 
 }
 
-func randomPoints(n int) plotter.XYs {
-	pts := make(plotter.XYs, n)
-	for i := range pts {
-		if i == 0 {
-			pts[i].X = rand.Float64()
-		} else {
-			pts[i].X = pts[i-1].X + rand.Float64()
-		}
-		pts[i].Y = pts[i].X + 10*rand.Float64()
-		//		fmt.Println("Random Points i=", i)
-	}
-	return pts
-}
-
 func dbCountMeasures() int {
 	var output string
 	//	sql.Register("sqlite3", &SQLiteDriver{})
@@ -179,7 +165,7 @@ func dbPointsCount(measureID int) int {
 	default:
 		{
 			cnt, _ := strconv.Atoi(output)
-			//			db.Close()
+			db.Close()
 			return cnt
 		}
 
@@ -231,6 +217,7 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 
 	rows, err := db.Query(q)
 	defer rows.Close()
+	defer db.Close()
 
 	//	return pts, idx
 
@@ -285,7 +272,6 @@ func dbPoints(measureID int, tpe int) plotter.XYs {
 	rows, err := db.Query("SELECT freq, magnitude,degrees FROM measure_data WHERE measure_id=" + strconv.Itoa(measureID) + " ORDER BY freq")
 	checkErr(err)
 
-	defer rows.Close()
 	rows.Scan(&count)
 
 	pts := make(plotter.XYs, count)
@@ -309,7 +295,8 @@ func dbPoints(measureID int, tpe int) plotter.XYs {
 		pidx++
 		checkErr(err)
 	}
-	//	db.Close()
+	rows.Close()
+	db.Close()
 	return pts
 }
 
@@ -362,6 +349,7 @@ func (LogTicks2) Ticks(min, max float64) []Tick {
 func drawModel(mw *MyMainWindow, tpe int) {
 
 	p, err := plot.New()
+
 	if err != nil {
 		panic(err)
 	}
@@ -389,6 +377,27 @@ func drawModel(mw *MyMainWindow, tpe int) {
 	//	p.X.Max = 6500000000
 	//p.Y.Min = -29
 	//p.Y.Min = -32
+
+	// Verify master record
+	masterMatch := false
+	fistCheck := -1
+	for i := range model.items {
+		if model.items[i].checked {
+			if fistCheck == -1 {
+				fistCheck = model.items[i].Index
+			}
+			if model.items[i].Index == MasterMeasure {
+				masterMatch = true
+			}
+		}
+	}
+	if fistCheck == -1 {
+		log.Print("No datasets found")
+		return
+	}
+	if masterMatch == false {
+		MasterMeasure = fistCheck
+	}
 
 	//	var plottingPointArgs []interface{}
 	vs := []interface{}{}
@@ -431,7 +440,7 @@ func drawModel(mw *MyMainWindow, tpe int) {
 			if model.items[i].checked && model.items[i].Index != MasterMeasure {
 				log.Print("------Add R dataset:" + model.items[i].Name)
 				vs = append(vs, model.items[i].Name)
-				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))")
+				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
 				log.Print("Records: ", cnt)
 				vs = append(vs, pts)
 			}
@@ -457,11 +466,26 @@ func drawModel(mw *MyMainWindow, tpe int) {
 
 	p.Add(plotter.NewGrid())
 
+	p.X.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
+	p.Y.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
+	p.BackgroundColor = color.RGBA{R: 55, G: 58, B: 60, A: 255}
+	p.Title.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Title.TextStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Legend.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+
 	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
 	// Save the plot to a PNG file.
 
 	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
-	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.70, fname); err != nil {
+	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.74, fname); err != nil {
 		panic(err)
 	}
 
@@ -548,6 +572,7 @@ func file2db(fpath string) {
 	checkErr(err)
 
 	defer rows.Close()
+	defer db.Close()
 	for rows.Next() {
 		//log.Print("File with same hash already exist!\n")
 		return
@@ -618,10 +643,12 @@ func file2db(fpath string) {
 				records_cnt_mag++
 			} else {
 				if magmode == 1 {
-					records[point].mag = 10 * math.Log10(mag)
+					// LINEAR
+					records[point].mag = mag // 10 * math.Log10(mag)
 					//					log.Print("Magmode 1 in=", mag, " out=", records[point].mag)
 				} else {
-					records[point].mag = mag
+					// DB
+					records[point].mag = math.Pow(10, mag) / 10
 				}
 
 				records_cnt_phase++
@@ -661,7 +688,7 @@ func file2db(fpath string) {
 		checkErr(err)
 	}
 	db.Exec("END TRANSACTION")
-	db.Close()
+
 }
 
 func process_dir(dir string) {
@@ -844,11 +871,24 @@ func (m *FooModel) ResetRows() {
 }
 
 func main() {
-
+	var combo *walk.ComboBox
+	var ExpEditButton *walk.PushButton
 	//	dbPointsExpression(759, 760, "test")
 	//	return
 
-	// register math functions
+	app := walk.App()
+	app.SetOrganizationName("RelizIT")
+	app.SetProductName("MeasureDB")
+
+	settings := walk.NewIniFileSettings("settings.ini")
+	if err := settings.Load(); err != nil {
+		log.Fatal(err)
+	} else {
+		log.Print(settings.Get("testzz"))
+	}
+
+	settings.Put("test2", "fuck off")
+	// ------------------------register math functions
 	var (
 		phdelta = &operators.Operator{
 			Name:          "phdelta",
@@ -914,9 +954,11 @@ func main() {
 	model = NewFooModel()
 
 	var tv *walk.TableView
-
+	var composite *walk.Composite
 	var splitter *walk.Splitter
+	var showContextMenu *walk.Action
 
+	expobj := new(Expression)
 	///////////////////////////////////////
 
 	if err := (MainWindow{
@@ -995,16 +1037,15 @@ func main() {
 			ActionRef{&PhaseGraphAction},
 		},
 		MinSize: Size{320, 240},
-		Size:    Size{1200, 600},
-		Layout:  VBox{MarginsZero: true},
+
+		Layout: VBox{MarginsZero: true},
 		Children: []Widget{
 			HSplitter{
 				AssignTo: &splitter,
 				Children: []Widget{
-
 					TabWidget{
-
 						AssignTo: &mw.tabWidget,
+
 						OnSizeChanged: func() {
 							log.Printf("Main window size changed", mw.tabWidget.Width())
 							imgW = int64(mw.tabWidget.Width())
@@ -1012,85 +1053,158 @@ func main() {
 
 						},
 					},
-					TableView{
-						AssignTo:              &tv,
-						AlternatingRowBGColor: walk.RGB(239, 239, 239),
-						CheckBoxes:            true,
-						ColumnsOrderable:      true,
-						MultiSelection:        true,
-						Columns: []TableViewColumn{
-							{Title: "#"},
-							{Title: "Name"},
-							{Title: "Points", Alignment: AlignFar},
-							{Title: "Date", Format: "2006-01-02 15:04:05", Width: 150},
-						},
+					Composite{
+						AssignTo: &composite,
+						MaxSize:  Size{450, 300},
 
-						StyleCell: func(style *walk.CellStyle) {
-							item := model.items[style.Row()]
+						Layout: Grid{Columns: 2},
+						Children: []Widget{
+							ComboBox{
+								AssignTo: &combo,
+								Value:    Bind("SpeciesId", SelRequired{}),
+								//BindingMember: "Id",
+								DisplayMember: "Name",
+								Model:         KnownExpressions(),
+								OnCurrentIndexChanged: func() {
+									log.Print(combo.CurrentIndex())
+									log.Print(combo.Text())
+								},
+							},
 
-							if item.checked {
-								if style.Row()%2 == 0 {
-									style.BackgroundColor = walk.RGB(159, 215, 255)
-									//									style.BackgroundColor = walk.RGB(159, 0, 0)
-								} else {
-									style.BackgroundColor = walk.RGB(143, 199, 239)
-									//									style.BackgroundColor = walk.RGB(159, 0, 255)
-								}
-							}
+							PushButton{
+								AssignTo:   &ExpEditButton,
+								ColumnSpan: 2,
+								Text:       "Edit Expression",
 
-							switch style.Col() {
-							case 1:
-								if canvas := style.Canvas(); canvas != nil {
-									bounds := style.Bounds()
-									bounds.X += 2
-									bounds.Y += 2
-									bounds.Width = int((float64(bounds.Width) - 4) / 5 * float64(len(item.Bar)))
-									bounds.Height -= 4
-									///									canvas.DrawBitmapPartWithOpacity(barBitmap, bounds, walk.Rectangle{0, 0, 100 / 5 * len(item.Bar), 1}, 127)
+								OnClicked: func() {
+									return
+									//exp := new(Expression)
+									var exp Expression
+									log.Print("Epression load")
 
-									bounds.X += 4
-									bounds.Y += 2
-									//									canvas.DrawText(item.Bar, tv.Font(), 0, bounds, walk.TextLeft)
-								}
+									//									exp := ExressionLoad(combo.Text())
+									log.Print("Call dialog")
+									return
+									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
+										log.Print(err)
+									} else if cmd == walk.DlgCmdOK {
+										log.Printf("%+v", expobj)
+									}
+								},
+							},
+							TableView{
+								AssignTo:              &tv,
+								AlternatingRowBGColor: walk.RGB(239, 239, 239),
+								CheckBoxes:            true,
+								ColumnsOrderable:      true,
+								MultiSelection:        true,
+								ContextMenuItems: []MenuItem{
+									Action{
+										AssignTo: &showContextMenu,
+										Text:     "Draw dataset",
+										OnTriggered: func() {
+											log.Printf("Жмак!")
+											mw.MagGraphAction_Triggered()
+										},
+									},
 
-							case 2:
+									Action{
+										AssignTo: &showContextMenu,
+										Text:     "Set Master Dataset",
+										OnTriggered: func() {
+											idx := tv.CurrentIndex()
+											if model.Checked(idx) && MasterMeasure != model.items[idx].Index {
+												log.Print("Master measure:"+model.items[idx].Name, "  ", model.items[idx].Index)
+												MasterMeasure = model.items[idx].Index
+											}
+										},
+									},
+									Action{
+										AssignTo: &showContextMenu,
+										Text:     "MenutItem",
+										OnTriggered: func() {
+											log.Printf("Жмак!")
+										},
+									},
+								},
+								Columns: []TableViewColumn{
+									{Title: "#"},
+									{Title: "Name"},
+									{Title: "Points", Width: 70}, //Alignment: AlignFar
+									{Title: "Date", Format: "2006-01-02 15:04:05", Width: 130},
+								},
 
-								if item.Baz >= 900.0 {
-									style.TextColor = walk.RGB(0, 191, 0)
-									style.Image = goodIcon
-								} else if item.Baz < 100.0 {
-									style.TextColor = walk.RGB(255, 0, 0)
-									style.Image = badIcon
-								}
+								StyleCell: func(style *walk.CellStyle) {
+									item := model.items[style.Row()]
 
-							case 3:
-								if item.Quux.After(time.Now().Add(-365 * 24 * time.Hour)) {
-									style.Font = boldFont
-								}
-							}
-						},
-						Model: model,
-						OnCurrentIndexChanged: func() {
-							//							model.ccccccccccccc
-							//							log.Printf("OnCurrentIndexChanged: %v\n", tv.CurrentIndex())
+									if item.checked {
+										if style.Row()%2 == 0 {
+											style.BackgroundColor = walk.RGB(159, 215, 255)
+											//									style.BackgroundColor = walk.RGB(159, 0, 0)
+										} else {
+											style.BackgroundColor = walk.RGB(143, 199, 239)
+											//									style.BackgroundColor = walk.RGB(159, 0, 255)
+										}
+									}
 
-						},
-						OnSelectedIndexesChanged: func() {
-							//							log.Printf("SelectedIndexes: %v\n", tv.SelectedIndexes())
-							idx := tv.CurrentIndex()
-							if model.Checked(idx) && MasterMeasure != model.items[idx].Index {
-								log.Print("Master measure:"+model.items[idx].Name, "  ", model.items[idx].Index)
-								MasterMeasure = model.items[idx].Index
-							}
+									switch style.Col() {
+									case 1:
+										if canvas := style.Canvas(); canvas != nil {
+											bounds := style.Bounds()
+											bounds.X += 2
+											bounds.Y += 2
+											bounds.Width = int((float64(bounds.Width) - 4) / 5 * float64(len(item.Bar)))
+											bounds.Height -= 4
+											///									canvas.DrawBitmapPartWithOpacity(barBitmap, bounds, walk.Rectangle{0, 0, 100 / 5 * len(item.Bar), 1}, 127)
 
-							//							checked := model.Checked(idx)
-							//							model.SetChecked(idx, true)
-							//							model.PublishRowChanged(idx)
-						},
-						OnItemActivated: func() {
-							//idx := pg.roleBaseDataTV.CurrentIndex()
+											bounds.X += 4
+											bounds.Y += 2
+											//									canvas.DrawText(item.Bar, tv.Font(), 0, bounds, walk.TextLeft)
+										}
 
-							//log.Printf("SelectedIndexes: %v\n", tv.Swi())
+									case 2:
+
+										if item.Baz >= 900.0 {
+											style.TextColor = walk.RGB(0, 191, 0)
+											style.Image = goodIcon
+										} else if item.Baz < 100.0 {
+											style.TextColor = walk.RGB(255, 0, 0)
+											style.Image = badIcon
+										}
+
+									case 3:
+										if item.Quux.After(time.Now().Add(-365 * 24 * time.Hour)) {
+											style.Font = boldFont
+										}
+									}
+								},
+								Model: model,
+								OnCurrentIndexChanged: func() {
+									//							model.ccccccccccccc
+									//									log.Printf("OnCurrentIndexChanged: %v\n", tv.CurrentIndex())
+
+								},
+								OnSelectedIndexesChanged: func() {
+
+									//							log.Printf("SelectedIndexes: %v\n", tv.SelectedIndexes())
+									/*
+										idx := tv.CurrentIndex()
+										if model.Checked(idx) && MasterMeasure != model.items[idx].Index {
+											log.Print("Master measure:"+model.items[idx].Name, "  ", model.items[idx].Index)
+											MasterMeasure = model.items[idx].Index
+										}
+									*/
+
+									//							checked := model.Checked(idx)
+									//							model.SetChecked(idx, true)
+									//							model.PublishRowChanged(idx)
+								},
+								OnItemActivated: func() {
+									//idx := pg.roleBaseDataTV.CurrentIndex()
+
+									//log.Printf("SelectedIndexes: %v\n", tv.Swi())
+								},
+							},
 						},
 					},
 				},
@@ -1125,7 +1239,7 @@ func main() {
 	//	lv.PostAppendText("This is a log\n")
 	//	lv.SetClientSize(walk.Size{500, 500})
 
-	log.SetOutput(lv)
+	//log.SetOutput(lv)
 
 	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH, lv)
 
@@ -1149,19 +1263,32 @@ func main() {
 	*/
 	//////////////////
 
-	go func() {
-		// wwwwwwwwwwwwwwwwwwww
-		log.Print("Directory monitor started.")
-		C.WatchDirectory(C.CString("C:\\MY\\Z"))
-		//C.WatchDirectory((*C.char)((syscall.StringToUTF16Ptr("C:\\MY\\Z"))))
-		//		syscall.StringToUTF16Ptr
-		for i := 0; i < 10000; i++ {
-			time.Sleep(10000 * time.Millisecond)
-			//			log.Println("Tic" + "\r\n")
-		}
-	}()
+	/*
+		// Groutine
+			go func() {
+				// wwwwwwwwwwwwwwwwwwww
+				log.Print("Directory monitor started.")
+
+				usb, err := NewUSB()
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				usb.RegisterDeviceNotification()
+				usb.Run()
+				//C.WatchDirectory(C.CString("C:\\MY\\Z"))
+				//C.WatchDirectory((*C.char)((syscall.StringToUTF16Ptr("C:\\MY\\Z"))))
+				//		syscall.StringToUTF16Ptr
+				for i := 0; i < 10000; i++ {
+					time.Sleep(10000 * time.Millisecond)
+					//			log.Println("Tic" + "\r\n")
+				}
+			}()
+	*/
+	defer settings.Save()
 
 	mw.MainWindow.Run()
+
 }
 
 type MyMainWindow struct {
@@ -1171,9 +1298,11 @@ type MyMainWindow struct {
 }
 
 func (mw *MyMainWindow) openAction_Triggered() {
-	if err := mw.openImage(); err != nil {
-		log.Print(err)
-	}
+	/*
+		if err := mw.openImage(); err != nil {
+			log.Print(err)
+		}*/
+
 }
 
 func (mw *MyMainWindow) MagGraphAction_Triggered() {
@@ -1188,11 +1317,19 @@ func (mw *MyMainWindow) MagGraphAction_Triggered() {
 
 			}*/
 
-	mw.tabWidget.Pages().Clear()
+	// HERE THE FUCK!
+
+	if mw.tabWidget.Pages().Len() == 3 {
+		//		mw.tabWidget.Pages().RemoveAt(0)
+		//		mw.tabWidget.Pages().RemoveAt(0)
+		//		mw.tabWidget.Pages().RemoveAt(2)
+	}
+	//	mw.tabWidget.Pages().Clear()
 
 	drawModel(mw, GraphMag)
 	drawModel(mw, GraphPhase)
 	drawModel(mw, GraphRdb)
+
 	//mw.tabWidget.Pages().At(0).SetCur
 	mw.tabWidget.SetCurrentIndex(0)
 	//win.SendMessage(mw.tabWidget.Handle(), win.TCM_SETCURFOCUS, 0)
@@ -1208,17 +1345,20 @@ func (mw *MyMainWindow) MagGraphAction_Triggered() {
 func (mw *MyMainWindow) PhaseGraphAction_Triggered() {
 
 	log.Print("graph action triggered")
-	log.Print(model.items)
-	drawModel(mw, GraphPhase)
-	for i := range model.items {
-		if model.items[i].checked {
-			log.Print(model.items[i].Name, model.items[i].Index)
-			//			zzzzzzzzzz
+	/*
+		log.Print(model.items)
+		drawModel(mw, GraphPhase)
+		for i := range model.items {
+			if model.items[i].checked {
+				log.Print(model.items[i].Name, model.items[i].Index)
+				//			zzzzzzzzzz
 
+			}
 		}
-	}
+	*/
 }
 
+/*
 func (mw *MyMainWindow) openImage() error {
 	dlg := new(walk.FileDialog)
 
@@ -1291,6 +1431,7 @@ func (mw *MyMainWindow) openImage() error {
 
 	return nil
 }
+*/
 
 func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 
@@ -1350,6 +1491,7 @@ func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 		return err
 	}
 
+	// HERE
 	if err := mw.tabWidget.Pages().Add(page); err != nil {
 		return err
 	}
@@ -1357,7 +1499,6 @@ func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 	if err := mw.tabWidget.SetCurrentIndex(mw.tabWidget.Pages().Len() - 1); err != nil {
 		return err
 	}
-
 	succeeded = true
 
 	return nil

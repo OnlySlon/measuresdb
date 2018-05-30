@@ -66,6 +66,12 @@ func (lv *LogView) textLength() int {
 func (lv *LogView) AppendText(value string) {
 	textLength := lv.textLength()
 	lv.setTextSelection(textLength, textLength)
+	defer func() {
+		if r := recover(); r != nil {
+			//fmt.Println("Recovered in f", r)
+			lv.SendMessage(win.EM_REPLACESEL, 0, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Uncrash!!!!"))))
+		}
+	}()
 	lv.SendMessage(win.EM_REPLACESEL, 0, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(value))))
 }
 
