@@ -34,6 +34,33 @@ func KnownExpressions2() []*Species {
 	}
 }
 
+/*
+
+func ExpressionNew(exp Expression) {
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+	checkErr(err)
+
+	// stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,?,?,?)")
+	stmt, err := db.Prepare("INSERT INTO expressions SET name=?, exp=?, axisname=?, apply=?, comment=? WHERE id=?")
+
+}
+*/
+
+func ExpressionUpdate(exp Expression) {
+
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+	checkErr(err)
+
+	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=? WHERE id=?")
+	checkErr(err)
+
+	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.Id)
+	checkErr(err)
+	log.Print("Update exp rows!!!")
+
+	db.Close()
+}
+
 func ExressionLoad(name string) Expression {
 	var exp Expression
 	var eid sql.NullInt64
@@ -80,7 +107,7 @@ func ExressionLoad(name string) Expression {
 	return exp
 }
 
-func KnownExpressions() []Species {
+func KnownExpressions(dbox *DropDownBox) []Species {
 
 	var exps []Species
 	var eid sql.NullInt64
@@ -101,6 +128,7 @@ func KnownExpressions() []Species {
 	//	return pts, idx
 
 	//	var nans = 0
+	dbox.model.Clean()
 	for rows.Next() {
 
 		err = rows.Scan(&eid, &ename)
@@ -109,7 +137,9 @@ func KnownExpressions() []Species {
 			Id:   int(eid.Int64),
 		}
 		exps = append(exps, exp)
+		dbox.model.Add(ename.String)
 	}
+
 	db.Close()
 	return exps
 }

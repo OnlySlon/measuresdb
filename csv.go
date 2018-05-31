@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"github.com/alfredxing/calc/constants"
-	"github.com/alfredxing/calc/operators"
-	"github.com/alfredxing/calc/operators/functions"
 
 	//	. "github.com/alfredxing/calc/operators"
 	"github.com/alfredxing/calc/compute"
@@ -86,6 +84,22 @@ type FooModel struct {
 }
 
 var model *FooModel
+
+var expdb *walk.DataBinder
+
+/*
+type DropDownBoxModel struct {
+	walk.ListModelBase
+	data []string
+}
+
+var expmodel *DropDownBoxModel
+*/
+/// walk.ImageView
+/// walk.ImageView
+//
+
+var tabimgDB = make(map[*walk.TabPage]*walk.ImageView)
 
 func hash_file_md5(filePath string) (string, error) {
 	var returnMD5String string
@@ -174,11 +188,7 @@ func dbPointsCount(measureID int) int {
 }
 
 func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
-	//var myexp = "log(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))/(MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))))"
-	//	var myexp = "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))"
 	var idx = 0
-	// log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))
-	//	myexp := "MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))"
 	log.Print("dbPointsExpression DS1=", ds1, " DS2=", ds2, " EXP="+myexp)
 	// xxxxx
 
@@ -222,6 +232,7 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 	//	return pts, idx
 
 	var nans = 0
+	var cnt = 0
 	for rows.Next() {
 
 		err = rows.Scan(&freq, &mag1, &ph1, &mag2, &ph2)
@@ -245,7 +256,11 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 				log.Print("NAN RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
 				nans++
 			} else {
-				//				log.Print("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+				if cnt < 2 {
+					log.Println("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+					cnt++
+				}
+
 			}
 
 			pts[idx].Y = res
@@ -422,6 +437,7 @@ func drawModel(mw *MyMainWindow, tpe int) {
 				log.Print("------Add Phase dataset:" + model.items[i].Name)
 				vs = append(vs, model.items[i].Name)
 				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "phdelta(PhA PhB)")
+				//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "ACosD(CosD(PhA-PhB))")
 				log.Print("Records: ", cnt)
 				vs = append(vs, pts)
 			}
@@ -440,8 +456,21 @@ func drawModel(mw *MyMainWindow, tpe int) {
 			if model.items[i].checked && model.items[i].Index != MasterMeasure {
 				log.Print("------Add R dataset:" + model.items[i].Name)
 				vs = append(vs, model.items[i].Name)
-				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
+				//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
+				//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))")
+				//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))) ")
+				//var exp = "((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos((phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))"
+				//var exp = "
+				//var exp = "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))) /  (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))))"
+				// (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(phdelta(PhA PhB))))
+
+				//				var exp = "20*Log10(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
+				//var exp = "20*Log10(sqrt(((MagA^2)+(MagB^2)+sqrt((MagA^4)+(MagB^4)+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
+
+				var exp = "20*Log10(Sqr((MagA^2+MagB^2+Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB)))) / (MagA^2+MagB^2-Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB))))))"
+				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp)
 				log.Print("Records: ", cnt)
+
 				vs = append(vs, pts)
 			}
 		}
@@ -643,12 +672,12 @@ func file2db(fpath string) {
 				records_cnt_mag++
 			} else {
 				if magmode == 1 {
-					// LINEAR
+					// LINEAR 1
 					records[point].mag = mag // 10 * math.Log10(mag)
 					//					log.Print("Magmode 1 in=", mag, " out=", records[point].mag)
 				} else {
 					// DB
-					records[point].mag = math.Pow(10, mag) / 10
+					records[point].mag = math.Pow(10, (mag / 20))
 				}
 
 				records_cnt_phase++
@@ -819,7 +848,7 @@ func (m *FooModel) ResetRows() {
 
 	var pidx = 0
 
-	m.items = make([]*Foo, 109)
+	m.items = make([]*Foo, dbCountMeasures())
 	now := time.Now()
 	for rows.Next() {
 		var measure_id int
@@ -876,6 +905,7 @@ func main() {
 	//	dbPointsExpression(759, 760, "test")
 	//	return
 
+	OpsRegister()
 	app := walk.App()
 	app.SetOrganizationName("RelizIT")
 	app.SetProductName("MeasureDB")
@@ -887,29 +917,9 @@ func main() {
 		log.Print(settings.Get("testzz"))
 	}
 
-	settings.Put("test2", "fuck off")
 	// ------------------------register math functions
-	var (
-		phdelta = &operators.Operator{
-			Name:          "phdelta",
-			Precedence:    0,
-			Associativity: operators.L,
-			Args:          2,
-			Operation: func(args []float64) float64 {
-				if (math.Abs(args[0] - args[1])) < 180 {
-					//					log.Print("match #1")
-					return math.Abs(args[0] - args[1])
-				} else {
-					//					log.Print("match #2")
-					return 360 - math.Abs(args[0]-args[1])
-				}
 
-			},
-		}
-	)
-	functions.Register(phdelta)
-
-	res, err := compute.Evaluate("phdelta(24 179)")
+	res, err := compute.Evaluate("CosD(24)")
 
 	if err != nil {
 		return
@@ -926,9 +936,6 @@ func main() {
 	////////////////////////////////
 
 	main_z()
-	//	MasterMeasure = 1472
-	//	dbPointsExpression(MasterMeasure, 1473, "log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*cos(2*(PhA-PhB))))))")
-	//	return
 	//////////////
 	//	return
 	boldFont, _ := walk.NewFont("Segoe UI", 9, walk.FontBold)
@@ -958,9 +965,14 @@ func main() {
 	var splitter *walk.Splitter
 	var showContextMenu *walk.Action
 
-	expobj := new(Expression)
+	var expmodel = new(DropDownBox)
+	expmodel.model = NewDropDownBoxModel()
+	KnownExpressions(expmodel)
+
+	//expobj := new(Expression)
 	///////////////////////////////////////
 
+	///
 	if err := (MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "RelizIT measures DB",
@@ -1056,15 +1068,20 @@ func main() {
 					Composite{
 						AssignTo: &composite,
 						MaxSize:  Size{450, 300},
+						DataBinder: DataBinder{
+							AssignTo: &expdb,
+						},
 
 						Layout: Grid{Columns: 2},
 						Children: []Widget{
+
 							ComboBox{
 								AssignTo: &combo,
-								Value:    Bind("SpeciesId", SelRequired{}),
+								//Value:    Bind("SpeciesId", SelRequired{}),
 								//BindingMember: "Id",
 								DisplayMember: "Name",
-								Model:         KnownExpressions(),
+								//Model:         KnownExpressions(),
+								Model: expmodel.model,
 								OnCurrentIndexChanged: func() {
 									log.Print(combo.CurrentIndex())
 									log.Print(combo.Text())
@@ -1073,25 +1090,55 @@ func main() {
 
 							PushButton{
 								AssignTo:   &ExpEditButton,
-								ColumnSpan: 2,
+								ColumnSpan: 4,
 								Text:       "Edit Expression",
 
 								OnClicked: func() {
-									return
-									//exp := new(Expression)
-									var exp Expression
+									// exp := new(Expression)
+									// var exp Expression
 									log.Print("Epression load")
 
-									//									exp := ExressionLoad(combo.Text())
+									exp := ExressionLoad(combo.Text())
 									log.Print("Call dialog")
-									return
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
 									} else if cmd == walk.DlgCmdOK {
-										log.Printf("%+v", expobj)
+										log.Print("OK button")
+										log.Printf("%+v", exp)
+										ExpressionUpdate(exp)
+										combo.Invalidate()
+										//										combo.Model.ItemsRe ggggggggggggggg
+										///combo.PublishRowsReset()
+										//										model := combo.Model()
+										//expdb.Reset()
+										//combo.Model().Reset()
 									}
 								},
 							},
+
+							PushButton{
+								//								AssignTo:   &ExpEditButton,
+								ColumnSpan: 4,
+								Text:       "Edit Expression",
+
+								OnClicked: func() {
+									// exp := new(Expression)
+									// var exp Expression
+									log.Print("Epression load")
+
+									exp := ExressionLoad(combo.Text())
+									log.Print("Call dialog")
+									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
+										log.Print(err)
+									} else if cmd == walk.DlgCmdOK {
+										log.Print("OK button")
+										log.Printf("%+v", exp)
+										ExpressionUpdate(exp)
+										combo.Invalidate()
+									}
+								},
+							},
+
 							TableView{
 								AssignTo:              &tv,
 								AlternatingRowBGColor: walk.RGB(239, 239, 239),
@@ -1239,7 +1286,7 @@ func main() {
 	//	lv.PostAppendText("This is a log\n")
 	//	lv.SetClientSize(walk.Size{500, 500})
 
-	//log.SetOutput(lv)
+	log.SetOutput(lv)
 
 	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH, lv)
 
@@ -1324,7 +1371,12 @@ func (mw *MyMainWindow) MagGraphAction_Triggered() {
 		//		mw.tabWidget.Pages().RemoveAt(0)
 		//		mw.tabWidget.Pages().RemoveAt(2)
 	}
-	//	mw.tabWidget.Pages().Clear()
+	// clean da images
+	for img := range tabimgDB {
+		img.Dispose()
+		delete(tabimgDB, img)
+	}
+	mw.tabWidget.Pages().Clear()
 
 	drawModel(mw, GraphMag)
 	drawModel(mw, GraphPhase)
@@ -1479,6 +1531,8 @@ func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 		return err
 	}
 
+	//	imageView.Dispose()
+
 	defer func() {
 		if !succeeded {
 			imageView.Dispose()
@@ -1490,11 +1544,13 @@ func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 	if err := imageView.SetImage(img); err != nil {
 		return err
 	}
-
 	// HERE
+
 	if err := mw.tabWidget.Pages().Add(page); err != nil {
 		return err
 	}
+
+	tabimgDB[page] = imageView // add image to database
 
 	if err := mw.tabWidget.SetCurrentIndex(mw.tabWidget.Pages().Len() - 1); err != nil {
 		return err
