@@ -38,9 +38,8 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-/*
-	#include "./c/dirmon.c"
-*/
+//	include "./c/dirmon.c"
+
 import "C"
 
 // 	_ "runtime/cgo"
@@ -907,6 +906,10 @@ func main() {
 	//	return
 
 	OpsRegister()
+
+	ExpressionDraw()
+	return
+
 	app := walk.App()
 	app.SetOrganizationName("RelizIT")
 	app.SetProductName("MeasureDB")
@@ -1053,11 +1056,12 @@ func main() {
 			ActionRef{&MagGraphAction},
 			ActionRef{&PhaseGraphAction},
 		},
-		MinSize: Size{320, 240},
+		MinSize: Size{320, 800},
 
 		Layout: VBox{MarginsZero: true},
 		Children: []Widget{
 			HSplitter{
+
 				AssignTo: &splitter,
 				Children: []Widget{
 					TabWidget{
@@ -1072,7 +1076,8 @@ func main() {
 					},
 					Composite{
 						AssignTo: &composite,
-						MaxSize:  Size{450, 300},
+						MinSize:  Size{0, 600},
+						MaxSize:  Size{450, 800},
 						DataBinder: DataBinder{
 							AssignTo: &expdb,
 						},
@@ -1103,7 +1108,7 @@ func main() {
 									// var exp Expression
 									log.Print("Epression load")
 
-									exp := ExressionLoad(combo.Text())
+									exp := ExressionLoad(combo.Text(), "name")
 									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)

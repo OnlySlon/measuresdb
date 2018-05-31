@@ -27,6 +27,10 @@ func IsEval(key string) bool {
 	return present
 }
 
+func MyEvalClear() {
+	evalDB = nil
+}
+
 func MyEvaluate(in string) (float64, error) {
 	floats := NewFloatStack()
 	ops := NewStringStack()

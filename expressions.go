@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strconv"
 
 	"database/sql"
 
@@ -62,7 +63,6 @@ func ExpressionUpdate(exp Expression) {
 
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
-
 	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=? WHERE id=?")
 	checkErr(err)
 
@@ -73,7 +73,57 @@ func ExpressionUpdate(exp Expression) {
 	db.Close()
 }
 
-func ExressionLoad(name string) Expression {
+//mw *MyMainWindow
+func ExpressionDraw() {
+	var egraph sql.NullString
+	var eid sql.NullInt64
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+
+	checkErr(err)
+
+	//	query, err := db.Prepare("SELECT Graph from expressions where apply=1 GROUP BY Graph;")
+	//	checkErr(err)
+
+	rows, err := db.Query("SELECT id, graph from expressions where apply=1")
+
+	//	return pts, idx
+	graphs := make(map[string][]int64)
+
+	//	var nans = 0
+	for rows.Next() {
+		err = rows.Scan(&eid, &egraph)
+		if len(egraph.String) > 0 {
+			log.Print("Begin draw graph '" + egraph.String + "'")
+			graphs[egraph.String] = append(graphs[egraph.String], eid.Int64)
+		}
+	}
+	rows.Close()
+	log.Print(graphs)
+
+	//var fname string
+	for graph := range graphs {
+		/*
+			p, err := plot.New()
+			if err != nil {
+				panic(err)
+			}
+		*/
+		log.Print("-------")
+		for expid := range graphs[graph] {
+
+			log.Print("Dooo ", graphs[graph][expid])
+			gid := graphs[graph][expid]
+			exp := ExressionLoad(strconv.Itoa(int(gid)), "id")
+
+		}
+
+	}
+
+	db.Close()
+
+}
+
+func ExressionLoad(name string, by string) Expression {
 	var exp Expression
 	var eid sql.NullInt64
 	var ename sql.NullString
@@ -88,27 +138,15 @@ func ExressionLoad(name string) Expression {
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
-	/*
-		checkErr(err)
-		query, err := db.Prepare("SELECT count(freq) FROM measure_data WHERE measure_id=? ORDER BY freq")
 
-		checkErr(err)
-
-		defer query.Close()
-
-		// Execute query using 'id' and place value into 'output'
-		err = query.QueryRow(measureID).Scan(&output)
-
-	*/
-
-	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph FROM expressions where name=?")
+	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph FROM expressions where ?=?")
 	checkErr(err)
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
 	//	log.Print(q)
 
 	//rows, err := db.Query(q)
 
-	err = query.QueryRow(name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph)
+	err = query.QueryRow(by, name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph)
 	if err == nil {
 		exp.Id = int(eid.Int64)
 		exp.Name = ename.String
