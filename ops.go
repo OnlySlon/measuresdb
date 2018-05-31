@@ -15,6 +15,19 @@ func rad2deg(a float64) float64 {
 	return a * math.Pi / 180
 }
 
+/*
+func ConstRegister() {
+
+	var (
+		cPh1 = &constants.Constant{
+			Name:  "PhA",
+			Value: 0,
+		}
+	)
+
+}
+*/
+
 func OpsRegister() {
 
 	var (

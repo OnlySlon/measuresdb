@@ -72,6 +72,11 @@ func (this *DropDownBoxModel) Add(v string) {
 	this.PublishItemsReset()
 }
 
+func (this *DropDownBoxModel) Update(v string) {
+
+	this.PublishItemsReset()
+}
+
 func (this *DropDownBoxModel) Clean() {
 	//this.data = append(this.data, v)
 	this.data = this.data[:0]

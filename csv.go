@@ -902,6 +902,7 @@ func (m *FooModel) ResetRows() {
 func main() {
 	var combo *walk.ComboBox
 	var ExpEditButton *walk.PushButton
+	var ExpNewButton *walk.PushButton
 	//	dbPointsExpression(759, 760, "test")
 	//	return
 
@@ -918,10 +919,14 @@ func main() {
 	}
 
 	// ------------------------register math functions
+	//Z=Cos(PhA)
 
-	res, err := compute.Evaluate("CosD(24)")
+	MyEvalAdd("B", "5+5")
+	MyEvalAdd("A", "sin(30)+10 + B")
+	res, err := MyEvaluate("A+10")
 
 	if err != nil {
+		log.Print("Error: " + err.Error())
 		return
 	}
 	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
@@ -1117,24 +1122,24 @@ func main() {
 							},
 
 							PushButton{
-								//								AssignTo:   &ExpEditButton,
+								AssignTo:   &ExpNewButton,
 								ColumnSpan: 4,
-								Text:       "Edit Expression",
+								Text:       "New Expression",
 
 								OnClicked: func() {
-									// exp := new(Expression)
+									//exp := new(Expression)
 									// var exp Expression
-									log.Print("Epression load")
-
-									exp := ExressionLoad(combo.Text())
+									var exp Expression
+									exp.Id = -1
 									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
 									} else if cmd == walk.DlgCmdOK {
 										log.Print("OK button")
 										log.Printf("%+v", exp)
-										ExpressionUpdate(exp)
-										combo.Invalidate()
+										ExpressionNew(exp)
+										KnownExpressions(expmodel)
+
 									}
 								},
 							},

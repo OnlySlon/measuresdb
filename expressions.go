@@ -10,12 +10,15 @@ import (
 )
 
 type Expression struct {
-	Id       int
-	Name     string
-	ExpVal   string
-	Remarks  string
-	Axisname string
-	Apply    bool
+	Id         int
+	Name       string // just name
+	ExpVal     string // evaluation value
+	Remarks    string // evaluatin remarks
+	Axisname   string // Y axis name
+	Apply      bool   // Create graph from this eval
+	ExportName string // export value
+	DbRes      bool   // result in dB
+	Graph      string // put this to graph
 }
 
 type Species struct {
@@ -34,27 +37,36 @@ func KnownExpressions2() []*Species {
 	}
 }
 
-/*
-
 func ExpressionNew(exp Expression) {
+
+	log.Print("ExpressionNew!!!")
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
 
+	defer db.Close()
+
 	// stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,?,?,?)")
-	stmt, err := db.Prepare("INSERT INTO expressions SET name=?, exp=?, axisname=?, apply=?, comment=? WHERE id=?")
+	stmt, err := db.Prepare("INSERT INTO expressions(name, exp, axisname, apply, comment, exportname, dbres, graph) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ")
+
+	checkErr(err)
+
+	res, err := stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph)
+
+	checkErr(err)
+	iid, _ := res.LastInsertId()
+	log.Print("New Expression -------- OK!!!! ID:", iid)
 
 }
-*/
 
 func ExpressionUpdate(exp Expression) {
 
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
 
-	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=? WHERE id=?")
+	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=? WHERE id=?")
 	checkErr(err)
 
-	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.Id)
+	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.Id)
 	checkErr(err)
 	log.Print("Update exp rows!!!")
 
@@ -69,6 +81,9 @@ func ExressionLoad(name string) Expression {
 	var eaxisname sql.NullString
 	var ecomment sql.NullString
 	var eapply sql.NullInt64
+	var dbres sql.NullInt64
+	var exportname sql.NullString
+	var graph sql.NullString
 
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
@@ -86,14 +101,14 @@ func ExressionLoad(name string) Expression {
 
 	*/
 
-	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment FROM expressions where name=?")
+	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph FROM expressions where name=?")
 	checkErr(err)
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
 	//	log.Print(q)
 
 	//rows, err := db.Query(q)
 
-	err = query.QueryRow(name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment)
+	err = query.QueryRow(name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph)
 	if err == nil {
 		exp.Id = int(eid.Int64)
 		exp.Name = ename.String
@@ -101,6 +116,11 @@ func ExressionLoad(name string) Expression {
 		exp.Remarks = ecomment.String
 		exp.Axisname = eaxisname.String
 		exp.Apply = !(eapply.Int64 == 0)
+		exp.DbRes = !(dbres.Int64 == 0)
+		exp.ExportName = exportname.String
+		exp.Graph = graph.String
+	} else {
+		log.Print("Can't load expression " + name)
 	}
 
 	db.Close()
@@ -182,10 +202,24 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 						//						ColumnSpan: 2,
 						Text: "Expression:",
 					},
+
 					TextEdit{
-						//						ColumnSpan: 2,
 						MinSize: Size{100, 50},
 						Text:    Bind("ExpVal"),
+					},
+
+					Label{
+						Text: "Result is dB:",
+					},
+					CheckBox{
+						Checked: Bind("DbRes"),
+					},
+
+					Label{
+						Text: "Export name:",
+					},
+					LineEdit{
+						Text: Bind("ExportName"),
 					},
 
 					Label{
@@ -193,6 +227,19 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 					},
 					LineEdit{
 						Text: Bind("Axisname"),
+					},
+
+					Label{
+						Text: "Apply to graph:",
+					},
+					CheckBox{
+						Checked: Bind("Apply"),
+					},
+					Label{
+						Text: "Graph Name:",
+					},
+					LineEdit{
+						Text: Bind("Graph"),
 					},
 
 					VSpacer{
@@ -208,13 +255,6 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 						ColumnSpan: 2,
 						MinSize:    Size{100, 50},
 						Text:       Bind("Remarks"),
-					},
-
-					Label{
-						Text: "Apply to graph:",
-					},
-					CheckBox{
-						Checked: Bind("Apply"),
 					},
 				},
 			},
