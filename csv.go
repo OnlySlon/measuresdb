@@ -24,7 +24,6 @@ import (
 	"github.com/alfredxing/calc/constants"
 
 	//	. "github.com/alfredxing/calc/operators"
-	"github.com/alfredxing/calc/compute"
 
 	"github.com/lxn/win"
 
@@ -186,7 +185,7 @@ func dbPointsCount(measureID int) int {
 	return 0
 }
 
-func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
+func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter.XYs, int) {
 	var idx = 0
 	log.Print("dbPointsExpression DS1=", ds1, " DS2=", ds2, " EXP="+myexp)
 	// xxxxx
@@ -244,36 +243,37 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 		constants.Register(cPh1)
 		constants.Register(cPh2)
 
-		res, err := compute.Evaluate(myexp)
+		//res, err := compute.Evaluate(myexp)
+		res, err := MyEvaluate(myexp)
 		if err != nil {
 			log.Print("Error: " + err.Error())
 			return nil, 0
 		} else {
-			//			log.Print("Freq=", freq, " Res=", res)
 			pts[idx].X = float64(freq)
 			if math.IsNaN(res) {
-				log.Print("NAN RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
-				nans++
+				if nans < 2 {
+					log.Print("NAN RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+					nans++
+				}
+
 			} else {
 				if cnt < 2 {
 					log.Println("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
 					cnt++
 				}
-
 			}
-
 			pts[idx].Y = res
+			if dbconvert {
+				pts[idx].Y = 20 * math.Log10(pts[idx].Y)
+			}
 			idx++
 		}
-
-		//		log.Print("Freq=", freq, " Ph1=", ph1, " Ph2=", ph2, " res=", res)
-
 	}
 	log.Print("Nan Results: ", nans)
 	return pts, idx
 }
 
-func dbPoints(measureID int, tpe int) plotter.XYs {
+func dbPoints(measureID int, tpe int, dbconvert bool) plotter.XYs {
 	//	pts := make(plotter.XYs, n)
 	var count = 0
 	count = dbPointsCount(measureID)
@@ -301,7 +301,11 @@ func dbPoints(measureID int, tpe int) plotter.XYs {
 		//		pts[pidx].Y = magnitude
 		pts[pidx].X = float64(freq)
 		if tpe == GraphMag {
+
 			pts[pidx].Y = magnitude
+			if dbconvert {
+				pts[pidx].Y = 20 * math.Log10(pts[pidx].Y)
+			}
 		} else {
 			pts[pidx].Y = degrees
 		}
@@ -422,59 +426,62 @@ func drawModel(mw *MyMainWindow, tpe int) {
 			if model.items[i].checked {
 				log.Print("Add dataset:" + model.items[i].Name)
 				vs = append(vs, model.items[i].Name)
-				vs = append(vs, dbPoints(model.items[i].Index, tpe))
+				vs = append(vs, dbPoints(model.items[i].Index, tpe, true))
+
 			}
 		}
 	}
 
 	// ------------------- PHASE DIFF ----------------------------
 	// func dbPointsExpression(ds1 int, ds2 int, exp string) (plotter.XYs, int)
-	if tpe == GraphPhase {
-		log.Print("-------------------- PHASE GRAPH---------------------------")
-		for i := range model.items {
-			if model.items[i].checked && model.items[i].Index != MasterMeasure {
-				log.Print("------Add Phase dataset:" + model.items[i].Name)
-				vs = append(vs, model.items[i].Name)
-				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "phdelta(PhA PhB)")
-				//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "ACosD(CosD(PhA-PhB))")
-				log.Print("Records: ", cnt)
-				vs = append(vs, pts)
+	/*
+		if tpe == GraphPhase {
+			log.Print("-------------------- PHASE GRAPH---------------------------")
+			for i := range model.items {
+				if model.items[i].checked && model.items[i].Index != MasterMeasure {
+					log.Print("------Add Phase dataset:" + model.items[i].Name)
+					vs = append(vs, model.items[i].Name)
+					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "phdelta(PhA PhB)")
+					//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "ACosD(CosD(PhA-PhB))")
+					log.Print("Records: ", cnt)
+					vs = append(vs, pts)
+				}
 			}
+			//		return
 		}
-		//		return
-	}
 
-	if tpe == GraphRdb {
-		fname = "./r.png"
-		p.Title.Text = "r(db) graph"
-		p.X.Label.Text = "Freq"
-		p.Y.Label.Text = "r(db)"
+		if tpe == GraphRdb {
+			fname = "./r.png"
+			p.Title.Text = "r(db) graph"
+			p.X.Label.Text = "Freq"
+			p.Y.Label.Text = "r(db)"
 
-		log.Print("-------------------- R GRAPH---------------------------")
-		for i := range model.items {
-			if model.items[i].checked && model.items[i].Index != MasterMeasure {
-				log.Print("------Add R dataset:" + model.items[i].Name)
-				vs = append(vs, model.items[i].Name)
-				//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
-				//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))")
-				//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))) ")
-				//var exp = "((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos((phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))"
-				//var exp = "
-				//var exp = "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))) /  (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))))"
-				// (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(phdelta(PhA PhB))))
+			log.Print("-------------------- R GRAPH---------------------------")
+			for i := range model.items {
+				if model.items[i].checked && model.items[i].Index != MasterMeasure {
+					log.Print("------Add R dataset:" + model.items[i].Name)
+					vs = append(vs, model.items[i].Name)
+					//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
+					//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))")
+					//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))) ")
+					//var exp = "((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos((phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))"
+					//var exp = "
+					//var exp = "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))) /  (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))))"
+					// (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(phdelta(PhA PhB))))
 
-				//				var exp = "20*Log10(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
-				//var exp = "20*Log10(sqrt(((MagA^2)+(MagB^2)+sqrt((MagA^4)+(MagB^4)+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
+					//				var exp = "20*Log10(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
+					//var exp = "20*Log10(sqrt(((MagA^2)+(MagB^2)+sqrt((MagA^4)+(MagB^4)+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
 
-				var exp = "20*Log10(Sqr((MagA^2+MagB^2+Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB)))) / (MagA^2+MagB^2-Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB))))))"
-				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp)
-				log.Print("Records: ", cnt)
+					var exp = "20*Log10(Sqr((MagA^2+MagB^2+Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB)))) / (MagA^2+MagB^2-Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB))))))"
+					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp)
+					log.Print("Records: ", cnt)
 
-				vs = append(vs, pts)
+					vs = append(vs, pts)
+				}
 			}
+			//		return
 		}
-		//		return
-	}
+	*/
 
 	log.Print("Draw graph...")
 	err = plotutil.AddLines(p,
@@ -517,7 +524,7 @@ func drawModel(mw *MyMainWindow, tpe int) {
 		panic(err)
 	}
 
-	openImage(mw, fname, tpe)
+	openImage(mw, fname, "Magnitude")
 
 }
 
@@ -538,15 +545,17 @@ func draw() {
 	p.X.Label.Text = "Freq"
 	p.Y.Label.Text = "Magnitude (db)"
 
-	fmt.Println(dbPoints(1677, 1))
+	//	fmt.Println(dbPoints(1677, 1))
 
-	err = plotutil.AddLines(p,
-		"Measure1", dbPoints(759, 1),
-		"Measure2", dbPoints(760, 1),
-	)
-	if err != nil {
-		panic(err)
-	}
+	/*
+		err = plotutil.AddLines(p,
+			"Measure1", dbPoints(759, 1),
+			"Measure2", dbPoints(760, 1),
+		)
+		if err != nil {
+			panic(err)
+		}
+	*/
 	p.X.Tick.Width = 2
 	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
 	//	p.X.Tick.Marker = commaTicks
@@ -742,10 +751,10 @@ func process_dir(dir string) {
 
 func main_z() {
 
-	var data_lookup = "C:\\MY\\zz\\"
+	var data_lookup = "./csv/"
 
 	process_dir(data_lookup)
-	draw()
+	//	draw()
 
 }
 
@@ -907,8 +916,13 @@ func main() {
 
 	OpsRegister()
 
+<<<<<<< HEAD
+	//	ExpressionDraw()
+	//	return
+=======
 	ExpressionDraw()
 	return
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 	app := walk.App()
 	app.SetOrganizationName("RelizIT")
@@ -947,8 +961,8 @@ func main() {
 	//////////////
 	//	return
 	boldFont, _ := walk.NewFont("Segoe UI", 9, walk.FontBold)
-	goodIcon, _ := walk.Resources.Icon("../img/check.ico")
-	badIcon, _ := walk.Resources.Icon("../img/stop.ico")
+	goodIcon, _ := walk.Resources.Icon("./img/check.ico")
+	badIcon, _ := walk.Resources.Icon("./img/stop.ico")
 
 	barBitmap, err := walk.NewBitmap(walk.Size{100, 1})
 	if err != nil {
@@ -992,26 +1006,26 @@ func main() {
 					Action{
 						AssignTo:    &openAction,
 						Text:        "&Open",
-						Image:       "../img/open.png",
+						Image:       "./img/open.png",
 						OnTriggered: mw.openAction_Triggered,
 					},
 					Action{
 						AssignTo:    &MagGraphAction,
 						Text:        "&Create Graph",
-						Image:       "../img/plus.png",
+						Image:       "./img/plus.png",
 						OnTriggered: mw.MagGraphAction_Triggered,
 					},
 					Action{
 						AssignTo:    &PhaseGraphAction,
 						Text:        "&Create ",
-						Image:       "../img/document-properties.png",
+						Image:       "./img/document-properties.png",
 						OnTriggered: mw.PhaseGraphAction_Triggered,
 					},
 					Separator{},
 					Action{
 						AssignTo:    &PhaseGraphAction,
 						Text:        "&Options ",
-						Image:       "../img/document-properties.png",
+						Image:       "./img/document-properties.png",
 						OnTriggered: mw.PhaseGraphAction_Triggered,
 					},
 					Separator{},
@@ -1028,13 +1042,13 @@ func main() {
 					Action{
 						AssignTo:    &openAction,
 						Text:        "Expressions Editor",
-						Image:       "../img/open.png",
+						Image:       "./img/open.png",
 						OnTriggered: mw.openAction_Triggered,
 					},
 					Action{
 						AssignTo:    &MagGraphAction,
 						Text:        "Constants Editor",
-						Image:       "../img/plus.png",
+						Image:       "./img/plus.png",
 						OnTriggered: mw.MagGraphAction_Triggered,
 					},
 				},
@@ -1056,7 +1070,11 @@ func main() {
 			ActionRef{&MagGraphAction},
 			ActionRef{&PhaseGraphAction},
 		},
+<<<<<<< HEAD
+		MinSize: Size{800, 0},
+=======
 		MinSize: Size{320, 800},
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 		Layout: VBox{MarginsZero: true},
 		Children: []Widget{
@@ -1076,8 +1094,13 @@ func main() {
 					},
 					Composite{
 						AssignTo: &composite,
+<<<<<<< HEAD
+						//						MinSize:  Size{0, 600},
+						MaxSize: Size{450, 800},
+=======
 						MinSize:  Size{0, 600},
 						MaxSize:  Size{450, 800},
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 						DataBinder: DataBinder{
 							AssignTo: &expdb,
 						},
@@ -1108,7 +1131,11 @@ func main() {
 									// var exp Expression
 									log.Print("Epression load")
 
+<<<<<<< HEAD
+									exp := ExressionLoad("name=\"" + combo.Text() + "\"")
+=======
 									exp := ExressionLoad(combo.Text(), "name")
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
@@ -1389,8 +1416,12 @@ func (mw *MyMainWindow) MagGraphAction_Triggered() {
 	mw.tabWidget.Pages().Clear()
 
 	drawModel(mw, GraphMag)
-	drawModel(mw, GraphPhase)
-	drawModel(mw, GraphRdb)
+
+	ExpressionDraw(mw)
+	////////////////////////////////////////////////////////
+
+	//	drawModel(mw, GraphPhase)
+	//	drawModel(mw, GraphRdb)
 
 	//mw.tabWidget.Pages().At(0).SetCur
 	mw.tabWidget.SetCurrentIndex(0)
@@ -1495,7 +1526,7 @@ func (mw *MyMainWindow) openImage() error {
 }
 */
 
-func openImage(mw *MyMainWindow, fpath string, tpe int) error {
+func openImage(mw *MyMainWindow, fpath string, title string) error {
 
 	img, err := walk.NewImageFromFile(fpath)
 	if err != nil {
@@ -1513,16 +1544,18 @@ func openImage(mw *MyMainWindow, fpath string, tpe int) error {
 	if err != nil {
 		return err
 	}
+	page.SetTitle(title)
+	/*
+		if tpe == GraphMag {
+			page.SetTitle("Magnitude Graph")
+		} else {
+			page.SetTitle("Phase Δ Graph")
+		}
 
-	if tpe == GraphMag {
-		page.SetTitle("Magnitude Graph")
-	} else {
-		page.SetTitle("Phase Δ Graph")
-	}
-
-	if tpe == GraphRdb {
-		page.SetTitle("r(db) Graph")
-	}
+		if tpe == GraphRdb {
+			page.SetTitle("r(db) Graph")
+		}
+	*/
 	/*
 		if page.SetTitle(path.Base(strings.Replace(fpath, "\\", "/", -1))); err != nil {
 			return err

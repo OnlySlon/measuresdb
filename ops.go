@@ -15,6 +15,14 @@ func rad2deg(a float64) float64 {
 	return a * math.Pi / 180
 }
 
+func linear2db(a float64) float64 {
+	return 10 * math.Log10(a)
+}
+
+func db2linear(a float64) float64 {
+	return math.Pow(10, (a / 10))
+}
+
 /*
 func ConstRegister() {
 

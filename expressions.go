@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"log"
 	"strconv"
 
@@ -8,6 +9,10 @@ import (
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/plotutil"
+	"gonum.org/v1/plot/vg"
 )
 
 type Expression struct {
@@ -20,6 +25,7 @@ type Expression struct {
 	ExportName string // export value
 	DbRes      bool   // result in dB
 	Graph      string // put this to graph
+	DbGraph    bool
 }
 
 type Species struct {
@@ -47,11 +53,11 @@ func ExpressionNew(exp Expression) {
 	defer db.Close()
 
 	// stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,?,?,?)")
-	stmt, err := db.Prepare("INSERT INTO expressions(name, exp, axisname, apply, comment, exportname, dbres, graph) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ")
+	stmt, err := db.Prepare("INSERT INTO expressions(name, exp, axisname, apply, comment, exportname, dbres, graph, dbgraph) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ")
 
 	checkErr(err)
 
-	res, err := stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph)
+	res, err := stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph)
 
 	checkErr(err)
 	iid, _ := res.LastInsertId()
@@ -61,12 +67,17 @@ func ExpressionNew(exp Expression) {
 
 func ExpressionUpdate(exp Expression) {
 
+	log.Print("EEEEXP UPDATE:", exp)
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
+<<<<<<< HEAD
+	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=?, dbgraph=? WHERE id=?")
+=======
 	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=? WHERE id=?")
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	checkErr(err)
 
-	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.Id)
+	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph, exp.Id)
 	checkErr(err)
 	log.Print("Update exp rows!!!")
 
@@ -74,24 +85,66 @@ func ExpressionUpdate(exp Expression) {
 }
 
 //mw *MyMainWindow
+<<<<<<< HEAD
+func ExpressionDraw(mw *MyMainWindow) {
+	var egraph sql.NullString
+	var eid sql.NullInt64
+	var exp sql.NullString
+	var exportname sql.NullString
+
+	// Master match handler
+	masterMatch := false
+	fistCheck := -1
+	for i := range model.items {
+		if model.items[i].checked {
+			if fistCheck == -1 {
+				fistCheck = model.items[i].Index
+			}
+			if model.items[i].Index == MasterMeasure {
+				masterMatch = true
+			}
+		}
+	}
+	if fistCheck == -1 {
+		log.Print("No datasets found")
+		return
+	}
+	if masterMatch == false {
+		MasterMeasure = fistCheck
+	}
+	// ----------------------------------------------------
+
+=======
 func ExpressionDraw() {
 	var egraph sql.NullString
 	var eid sql.NullInt64
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
 
+<<<<<<< HEAD
+	// ------------ Load all graph for drawing ---------------
+	rows, err := db.Query("SELECT id, graph, exp, exportname FROM expressions WHERE apply=1")
+
+	//	return pts, idx g
+=======
 	//	query, err := db.Prepare("SELECT Graph from expressions where apply=1 GROUP BY Graph;")
 	//	checkErr(err)
 
 	rows, err := db.Query("SELECT id, graph from expressions where apply=1")
 
 	//	return pts, idx
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	graphs := make(map[string][]int64)
 
 	//	var nans = 0
 	for rows.Next() {
+<<<<<<< HEAD
+		err = rows.Scan(&eid, &egraph, &exp, &exportname)
+=======
 		err = rows.Scan(&eid, &egraph)
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 		if len(egraph.String) > 0 {
 			log.Print("Begin draw graph '" + egraph.String + "'")
 			graphs[egraph.String] = append(graphs[egraph.String], eid.Int64)
@@ -100,6 +153,68 @@ func ExpressionDraw() {
 	rows.Close()
 	log.Print(graphs)
 
+<<<<<<< HEAD
+	/*
+			MyEvalAdd("B", "5+5")
+		MyEvalAdd("A", "sin(30)+10 + B")
+	*/
+	// --------- Load all exported values to compute module
+	rows, err = db.Query("SELECT exportname, exp FROM expressions GROUP BY exportname")
+	MyEvalClear()
+	for rows.Next() {
+		err = rows.Scan(&exportname, &exp)
+
+		// func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
+		if len(exportname.String) > 0 {
+			log.Print("EXP " + exportname.String + "=" + exp.String)
+			MyEvalAdd(exportname.String, exp.String)
+		}
+	}
+
+	//var fname string
+	var cnt = 0
+	for graph := range graphs {
+		vs := []interface{}{}
+
+		p, err := plot.New()
+		if err != nil {
+			panic(err)
+		}
+
+		var fname = "./" + graph + ".png"
+		p.Title.Text = ""
+		p.X.Label.Text = "Frequency"
+
+		p.Y.Label.Text = "Magnitude (db)"
+		p.Add(plotter.NewGrid())
+		GraphSetTheme(p)
+		cnt++
+		log.Print("-------")
+		for expid := range graphs[graph] {
+			log.Print("Dooo ", graphs[graph][expid])
+			gid := graphs[graph][expid]
+			exp := ExressionLoad("id=" + strconv.Itoa(int(gid)))
+			p.Title.Text += exp.Name + " "
+			p.Y.Label.Text = exp.Axisname
+			// Apply expression to all datasets
+			for i := range model.items {
+				if model.items[i].checked && model.items[i].Index != MasterMeasure {
+					vs = append(vs, model.items[i].Name)
+					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp.ExpVal, exp.DbGraph) // load all points from db and apply expression
+					vs = append(vs, pts)
+					log.Print("Records: ", cnt)
+				}
+			}
+		}
+		log.Print("Draw graph...")
+		err = plotutil.AddLines(p,
+			vs...,
+		)
+		if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.74, fname); err != nil {
+			panic(err)
+		}
+		openImage(mw, fname, graph)
+=======
 	//var fname string
 	for graph := range graphs {
 		/*
@@ -116,6 +231,7 @@ func ExpressionDraw() {
 			exp := ExressionLoad(strconv.Itoa(int(gid)), "id")
 
 		}
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 	}
 
@@ -123,7 +239,11 @@ func ExpressionDraw() {
 
 }
 
+<<<<<<< HEAD
+func ExressionLoad(where string) Expression {
+=======
 func ExressionLoad(name string, by string) Expression {
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	var exp Expression
 	var eid sql.NullInt64
 	var ename sql.NullString
@@ -134,19 +254,29 @@ func ExressionLoad(name string, by string) Expression {
 	var dbres sql.NullInt64
 	var exportname sql.NullString
 	var graph sql.NullString
+	var dbgraph sql.NullInt64
 
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
+<<<<<<< HEAD
+	log.Print("ExressionLoad load: " + where)
+	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph, dbgraph FROM expressions WHERE " + where)
+=======
 
 	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph FROM expressions where ?=?")
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	checkErr(err)
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
 	//	log.Print(q)
 
 	//rows, err := db.Query(q)
 
+<<<<<<< HEAD
+	err = query.QueryRow().Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph, &dbgraph)
+=======
 	err = query.QueryRow(by, name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph)
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	if err == nil {
 		exp.Id = int(eid.Int64)
 		exp.Name = ename.String
@@ -157,8 +287,11 @@ func ExressionLoad(name string, by string) Expression {
 		exp.DbRes = !(dbres.Int64 == 0)
 		exp.ExportName = exportname.String
 		exp.Graph = graph.String
+		exp.DbGraph = !(dbgraph.Int64 == 0)
 	} else {
-		log.Print("Can't load expression " + name)
+		log.Print("Can't load expression "+where, err)
+		exp.Id = -1
+		return exp
 	}
 
 	db.Close()
@@ -274,7 +407,13 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 						Checked: Bind("Apply"),
 					},
 					Label{
-						Text: "Graph Name:",
+						Text: "Graph in bB:",
+					},
+					CheckBox{
+						Checked: Bind("DbGraph"),
+					},
+					Label{
+						Text: "Gtaph Name:",
 					},
 					LineEdit{
 						Text: Bind("Graph"),
@@ -321,4 +460,23 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 			},
 		},
 	}.Run(owner)
+}
+
+func GraphSetTheme(p *plot.Plot) {
+	p.X.Tick.Width = 2
+	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
+	p.X.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
+	p.Y.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
+	p.BackgroundColor = color.RGBA{R: 55, G: 58, B: 60, A: 255}
+	p.Title.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Title.TextStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Legend.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 }

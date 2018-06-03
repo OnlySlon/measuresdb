@@ -4,7 +4,6 @@ import (
 	"errors"
 	"go/scanner"
 	"go/token"
-	"log"
 	"strconv"
 	"strings"
 
@@ -28,7 +27,12 @@ func IsEval(key string) bool {
 }
 
 func MyEvalClear() {
+<<<<<<< HEAD
+	evalDB = make(map[string]string)
+
+=======
 	evalDB = nil
+>>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 }
 
 func MyEvaluate(in string) (float64, error) {
@@ -63,7 +67,7 @@ ScanLoop:
 				evalUnprecedenced("*", ops, floats)
 			}
 		case IsEval(lit):
-			log.Print("Eval:" + lit)
+			//			log.Print("Eval:" + lit)
 			eval, _ := evalDB[lit]
 			r, err := MyEvaluate(eval)
 			if err != nil {
