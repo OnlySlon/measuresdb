@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"image/color"
 	"io"
 	"io/ioutil"
 	"log"
@@ -21,14 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alfredxing/calc/constants"
-
-	//	. "github.com/alfredxing/calc/operators"
-
-	"github.com/lxn/win"
-
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
+	"github.com/lxn/win"
 	_ "github.com/mattn/go-sqlite3"
 
 	"gonum.org/v1/plot"
@@ -187,25 +181,25 @@ func dbPointsCount(measureID int) int {
 
 func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter.XYs, int) {
 	var idx = 0
-	log.Print("dbPointsExpression DS1=", ds1, " DS2=", ds2, " EXP="+myexp)
+	//	log.Print("dbPointsExpression DS1=", ds1, " DS2=", ds2, " EXP="+myexp)
 	// xxxxx
 
 	pts := make(plotter.XYs, dbPointsCount(ds1))
 
 	var (
-		cPh1 = &constants.Constant{
+		cPh1 = &Constant{
 			Name:  "PhA",
 			Value: 0,
 		}
-		cMag1 = &constants.Constant{
+		cMag1 = &Constant{
 			Name:  "MagA",
 			Value: 0,
 		}
-		cPh2 = &constants.Constant{
+		cPh2 = &Constant{
 			Name:  "PhB",
 			Value: 0,
 		}
-		cMag2 = &constants.Constant{
+		cMag2 = &Constant{
 			Name:  "MagB",
 			Value: 0,
 		}
@@ -221,7 +215,7 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 	checkErr(err)
 
 	var q = "SELECT m1.freq, m1.magnitude, m1.degrees, m2.magnitude, m2.degrees FROM measure_data as m1 LEFT join measure_data as m2 WHERE m1.freq=m2.freq AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
-	log.Print(q)
+	//	log.Print(q)
 
 	rows, err := db.Query(q)
 	defer rows.Close()
@@ -238,10 +232,13 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 		cMag2.Value = mag2
 		cPh1.Value = ph1
 		cPh2.Value = ph2
-		constants.Register(cMag1)
-		constants.Register(cMag2)
-		constants.Register(cPh1)
-		constants.Register(cPh2)
+		ConstRegister(cMag1)
+		ConstRegister(cMag2)
+		ConstRegister(cPh1)
+		ConstRegister(cPh2)
+
+		SetMagPhase(A, mag1, ph1)
+		SetMagPhase(B, mag2, ph2)
 
 		//res, err := compute.Evaluate(myexp)
 		res, err := MyEvaluate(myexp)
@@ -493,34 +490,18 @@ func drawModel(mw *MyMainWindow, tpe int) {
 		//panic(err)
 	}
 
-	p.X.Tick.Width = 2
-	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
+	//	p.X.Tick.Width = 2
+	//	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
 	//	p.X.Tick.Marker = commaTicks
 	//p.Y.Tick.Marker = plot.LogTicks{}
 	// plot.ConstantTicks([]plot.Tick{{-31, "0"}, {-30, ""}, {-29, "zzz"}, {75, "-sss"}, {100, "ddd"}})
 
-	p.Add(plotter.NewGrid())
-
-	p.X.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Y.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.X.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Y.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.X.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Y.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.X.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
-	p.Y.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}
-	p.BackgroundColor = color.RGBA{R: 55, G: 58, B: 60, A: 255}
-	p.Title.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Title.TextStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.X.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Y.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	p.Legend.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-
+	GraphSetTheme(p)
 	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
 	// Save the plot to a PNG file.
 
 	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
-	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.74, fname); err != nil {
+	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.72, fname); err != nil {
 		panic(err)
 	}
 
@@ -528,55 +509,6 @@ func drawModel(mw *MyMainWindow, tpe int) {
 
 }
 
-func draw() {
-	// 1783
-	rand.Seed(int64(0))
-
-	p, err := plot.New()
-	if err != nil {
-		panic(err)
-	}
-
-	//	p.X.Min = 5500000000
-	//	p.X.Max = 6500000000
-	p.Y.Min = -29
-	p.Y.Min = -32
-	p.Title.Text = "--------TEST--------"
-	p.X.Label.Text = "Freq"
-	p.Y.Label.Text = "Magnitude (db)"
-
-	//	fmt.Println(dbPoints(1677, 1))
-
-	/*
-		err = plotutil.AddLines(p,
-			"Measure1", dbPoints(759, 1),
-			"Measure2", dbPoints(760, 1),
-		)
-		if err != nil {
-			panic(err)
-		}
-	*/
-	p.X.Tick.Width = 2
-	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
-	//	p.X.Tick.Marker = commaTicks
-	//p.Y.Tick.Marker = plot.LogTicks{}
-	// plot.ConstantTicks([]plot.Tick{{-31, "0"}, {-30, ""}, {-29, "zzz"}, {75, "-sss"}, {100, "ddd"}})
-
-	p.Add(plotter.NewGrid())
-
-	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
-	// Save the plot to a PNG file.
-
-	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
-	//if err := p.Save(vg.Points(float64(imgW))/1, vg.Points(float64(imgH))/1, "points.png"); err != nil {
-	// 100x100 132
-	//
-	if err := p.Save(vg.Points(1452)*0.75, vg.Points(965)*0.75, "points.png"); err != nil {
-
-		panic(err)
-	}
-
-}
 func checkErr(err error) {
 	if err != nil {
 		log.Print(err)
@@ -731,12 +663,13 @@ func file2db(fpath string) {
 func process_dir(dir string) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Fatal(err)
+		log.Print("ioutil.ReadDir", err)
 	}
 
 	for _, f := range files {
 
 		//		fmt.Println(filepath.Ext(f.Name()))
+		log.Print(filepath.Ext(f.Name()))
 		if filepath.Ext(f.Name()) == ".csv" {
 			//			var filename = f.Name()
 			//			var extension = filepath.Ext(filename)
@@ -747,15 +680,7 @@ func process_dir(dir string) {
 
 		}
 	}
-}
-
-func main_z() {
-
-	var data_lookup = "./csv/"
-
-	process_dir(data_lookup)
-	//	draw()
-
+	model.PublishRowsReset()
 }
 
 func NewFooModel() *FooModel {
@@ -911,22 +836,20 @@ func main() {
 	var combo *walk.ComboBox
 	var ExpEditButton *walk.PushButton
 	var ExpNewButton *walk.PushButton
+	var ExpDelButton *walk.PushButton
 	//	dbPointsExpression(759, 760, "test")
 	//	return
 
 	OpsRegister()
 
-<<<<<<< HEAD
 	//	ExpressionDraw()
 	//	return
-=======
-	ExpressionDraw()
-	return
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 	app := walk.App()
 	app.SetOrganizationName("RelizIT")
 	app.SetProductName("MeasureDB")
+
+	ConfigTest()
 
 	settings := walk.NewIniFileSettings("settings.ini")
 	if err := settings.Load(); err != nil {
@@ -937,10 +860,28 @@ func main() {
 
 	// ------------------------register math functions
 	//Z=Cos(PhA)
+	/*
+		var (
+			constA = &Constant{
+				Name:  "A",
+				Value: 0,
+			}
+			constB = &Constant{
+				Name:  "B",
+				Value: 0,
+			}
+		)
+		ConstRegister(constA)
+		ConstRegister(constB)
+	*/
+	SetMagPhase(A, 11, 22)
+	SetMagPhase(B, 33, 44)
 
-	MyEvalAdd("B", "5+5")
-	MyEvalAdd("A", "sin(30)+10 + B")
-	res, err := MyEvaluate("A+10")
+	//	MyEvalAdd("C", "5+5")
+	//	MyEvalAdd("D", "sin(30)+10 + C")
+
+	res, err := MyEvaluate("phd(B)")
+	//res, err := MyEvaluate("Sqr((Mag(A)^2+Mag(B)^2+sqr(Mag(A)^4+Mag(B)^4+2*Mag(A)^2*Mag(B)^2*CosD(2*(PhD(A)-PhD(B))))) / (Mag(A)^2+Mag(B)^2-sqr(Mag(A)^4+Mag(B)^4+2*Mag(A)^2*Mag(B)^2*CosD(2*(PhD(A)-PhD(B))))))")
 
 	if err != nil {
 		log.Print("Error: " + err.Error())
@@ -949,7 +890,7 @@ func main() {
 	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
 
 	log.Print(res)
-	//	return
+	//return
 
 	mw := new(MyMainWindow)
 	var openAction *walk.Action
@@ -957,7 +898,8 @@ func main() {
 	var PhaseGraphAction *walk.Action
 	////////////////////////////////
 
-	main_z()
+	//	var data_lookup = "./csv/"
+	//	process_dir(data_lookup)
 	//////////////
 	//	return
 	boldFont, _ := walk.NewFont("Segoe UI", 9, walk.FontBold)
@@ -984,6 +926,8 @@ func main() {
 
 	var tv *walk.TableView
 	var composite *walk.Composite
+	//	var compositee *walk.Composite
+
 	var splitter *walk.Splitter
 	var showContextMenu *walk.Action
 
@@ -1026,7 +970,7 @@ func main() {
 						AssignTo:    &PhaseGraphAction,
 						Text:        "&Options ",
 						Image:       "./img/document-properties.png",
-						OnTriggered: mw.PhaseGraphAction_Triggered,
+						OnTriggered: mw.Configuration_Triggered,
 					},
 					Separator{},
 					Action{
@@ -1070,11 +1014,7 @@ func main() {
 			ActionRef{&MagGraphAction},
 			ActionRef{&PhaseGraphAction},
 		},
-<<<<<<< HEAD
-		MinSize: Size{800, 0},
-=======
 		MinSize: Size{320, 800},
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 		Layout: VBox{MarginsZero: true},
 		Children: []Widget{
@@ -1094,48 +1034,45 @@ func main() {
 					},
 					Composite{
 						AssignTo: &composite,
-<<<<<<< HEAD
 						//						MinSize:  Size{0, 600},
 						MaxSize: Size{450, 800},
-=======
-						MinSize:  Size{0, 600},
-						MaxSize:  Size{450, 800},
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 						DataBinder: DataBinder{
 							AssignTo: &expdb,
 						},
 
-						Layout: Grid{Columns: 2},
+						Layout: Grid{Columns: 3},
 						Children: []Widget{
 
 							ComboBox{
-								AssignTo: &combo,
+								ColumnSpan: 3,
+								AssignTo:   &combo,
 								//Value:    Bind("SpeciesId", SelRequired{}),
 								//BindingMember: "Id",
 								DisplayMember: "Name",
+								CurrentIndex:  0,
+
 								//Model:         KnownExpressions(),
 								Model: expmodel.model,
 								OnCurrentIndexChanged: func() {
 									log.Print(combo.CurrentIndex())
 									log.Print(combo.Text())
+									//									combo.SetCurrentIndex(1)
 								},
 							},
 
 							PushButton{
 								AssignTo:   &ExpEditButton,
-								ColumnSpan: 4,
+								ColumnSpan: 1,
 								Text:       "Edit Expression",
+								Image:      "./img/document-properties.png",
 
 								OnClicked: func() {
+									//									combo.SetCurrentIndex(2)
 									// exp := new(Expression)
 									// var exp Expression
 									log.Print("Epression load")
 
-<<<<<<< HEAD
 									exp := ExressionLoad("name=\"" + combo.Text() + "\"")
-=======
-									exp := ExressionLoad(combo.Text(), "name")
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
@@ -1149,15 +1086,17 @@ func main() {
 										//										model := combo.Model()
 										//expdb.Reset()
 										//combo.Model().Reset()
+										KnownExpressions(expmodel)
+										combo.SetCurrentIndex(0)
 									}
 								},
 							},
 
 							PushButton{
 								AssignTo:   &ExpNewButton,
-								ColumnSpan: 4,
+								ColumnSpan: 1,
 								Text:       "New Expression",
-
+								Image:      "./img/document-new.png",
 								OnClicked: func() {
 									//exp := new(Expression)
 									// var exp Expression
@@ -1171,12 +1110,30 @@ func main() {
 										log.Printf("%+v", exp)
 										ExpressionNew(exp)
 										KnownExpressions(expmodel)
+										combo.SetCurrentIndex(0)
+									}
+								},
+							},
+
+							PushButton{
+								AssignTo:   &ExpDelButton,
+								ColumnSpan: 1,
+								Text:       "Delete Expression",
+								Image:      "./img/system-shutdown.png",
+								OnClicked: func() {
+									model.PublishRowsReset()
+									ret := walk.MsgBox(mw, "Delete expression", "Delete expression '"+combo.Text()+"'", walk.MsgBoxYesNo|walk.MsgBoxIconQuestion)
+									if ret == win.IDYES {
+										DxpressionDelete(combo.Text())
+										KnownExpressions(expmodel)
+										combo.SetCurrentIndex(0)
 
 									}
 								},
 							},
 
 							TableView{
+								ColumnSpan:            3,
 								AssignTo:              &tv,
 								AlternatingRowBGColor: walk.RGB(239, 239, 239),
 								CheckBoxes:            true,
@@ -1347,28 +1304,26 @@ func main() {
 	*/
 	//////////////////
 
-	/*
-		// Groutine
-			go func() {
-				// wwwwwwwwwwwwwwwwwwww
-				log.Print("Directory monitor started.")
+	// Groutine
+	go func() {
+		// wwwwwwwwwwwwwwwwwwww
+		log.Print("Directory monitor started.")
 
-				usb, err := NewUSB()
-				if err != nil {
-					log.Fatal(err)
-				}
+		usb, err := NewUSB()
+		if err != nil {
+			log.Fatal(err)
+		}
 
-				usb.RegisterDeviceNotification()
-				usb.Run()
-				//C.WatchDirectory(C.CString("C:\\MY\\Z"))
-				//C.WatchDirectory((*C.char)((syscall.StringToUTF16Ptr("C:\\MY\\Z"))))
-				//		syscall.StringToUTF16Ptr
-				for i := 0; i < 10000; i++ {
-					time.Sleep(10000 * time.Millisecond)
-					//			log.Println("Tic" + "\r\n")
-				}
-			}()
-	*/
+		usb.RegisterDeviceNotification()
+		usb.Run()
+		//C.WatchDirectory(C.CString("C:\\MY\\Z"))
+		//C.WatchDirectory((*C.char)((syscall.StringToUTF16Ptr("C:\\MY\\Z"))))
+		//		syscall.StringToUTF16Ptr
+		for i := 0; i < 10000; i++ {
+			time.Sleep(10000 * time.Millisecond)
+			//			log.Println("Tic" + "\r\n")
+		}
+	}()
 	defer settings.Save()
 
 	mw.MainWindow.Run()
@@ -1433,6 +1388,11 @@ func (mw *MyMainWindow) MagGraphAction_Triggered() {
 
 		}
 	}
+}
+
+func (mw *MyMainWindow) Configuration_Triggered() {
+	log.Print("configuration action triggered")
+	ConfigRunDialog(mw)
 }
 
 func (mw *MyMainWindow) PhaseGraphAction_Triggered() {

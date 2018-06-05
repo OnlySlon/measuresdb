@@ -10,9 +10,9 @@ import (
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/plotutil"
 	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/draw"
 )
 
 type Expression struct {
@@ -44,6 +44,19 @@ func KnownExpressions2() []*Species {
 	}
 }
 
+func DxpressionDelete(name string) {
+
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+	checkErr(err)
+
+	defer db.Close()
+	// stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points) values(?,?,?,?,?)")
+	stmt, err := db.Prepare("DELETE FROM expressions WHERE name=?")
+	checkErr(err)
+	stmt.Exec(name)
+
+}
+
 func ExpressionNew(exp Expression) {
 
 	log.Print("ExpressionNew!!!")
@@ -70,11 +83,7 @@ func ExpressionUpdate(exp Expression) {
 	log.Print("EEEEXP UPDATE:", exp)
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
-<<<<<<< HEAD
 	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=?, dbgraph=? WHERE id=?")
-=======
-	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=? WHERE id=?")
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	checkErr(err)
 
 	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph, exp.Id)
@@ -85,7 +94,6 @@ func ExpressionUpdate(exp Expression) {
 }
 
 //mw *MyMainWindow
-<<<<<<< HEAD
 func ExpressionDraw(mw *MyMainWindow) {
 	var egraph sql.NullString
 	var eid sql.NullInt64
@@ -114,37 +122,19 @@ func ExpressionDraw(mw *MyMainWindow) {
 	}
 	// ----------------------------------------------------
 
-=======
-func ExpressionDraw() {
-	var egraph sql.NullString
-	var eid sql.NullInt64
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
 
-<<<<<<< HEAD
 	// ------------ Load all graph for drawing ---------------
 	rows, err := db.Query("SELECT id, graph, exp, exportname FROM expressions WHERE apply=1")
 
 	//	return pts, idx g
-=======
-	//	query, err := db.Prepare("SELECT Graph from expressions where apply=1 GROUP BY Graph;")
-	//	checkErr(err)
-
-	rows, err := db.Query("SELECT id, graph from expressions where apply=1")
-
-	//	return pts, idx
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	graphs := make(map[string][]int64)
 
 	//	var nans = 0
 	for rows.Next() {
-<<<<<<< HEAD
 		err = rows.Scan(&eid, &egraph, &exp, &exportname)
-=======
-		err = rows.Scan(&eid, &egraph)
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 		if len(egraph.String) > 0 {
 			log.Print("Begin draw graph '" + egraph.String + "'")
 			graphs[egraph.String] = append(graphs[egraph.String], eid.Int64)
@@ -153,7 +143,6 @@ func ExpressionDraw() {
 	rows.Close()
 	log.Print(graphs)
 
-<<<<<<< HEAD
 	/*
 			MyEvalAdd("B", "5+5")
 		MyEvalAdd("A", "sin(30)+10 + B")
@@ -186,12 +175,11 @@ func ExpressionDraw() {
 		p.X.Label.Text = "Frequency"
 
 		p.Y.Label.Text = "Magnitude (db)"
-		p.Add(plotter.NewGrid())
 		GraphSetTheme(p)
 		cnt++
 		log.Print("-------")
 		for expid := range graphs[graph] {
-			log.Print("Dooo ", graphs[graph][expid])
+			//			log.Print("Dooo ", graphs[graph][expid])
 			gid := graphs[graph][expid]
 			exp := ExressionLoad("id=" + strconv.Itoa(int(gid)))
 			p.Title.Text += exp.Name + " "
@@ -214,24 +202,6 @@ func ExpressionDraw() {
 			panic(err)
 		}
 		openImage(mw, fname, graph)
-=======
-	//var fname string
-	for graph := range graphs {
-		/*
-			p, err := plot.New()
-			if err != nil {
-				panic(err)
-			}
-		*/
-		log.Print("-------")
-		for expid := range graphs[graph] {
-
-			log.Print("Dooo ", graphs[graph][expid])
-			gid := graphs[graph][expid]
-			exp := ExressionLoad(strconv.Itoa(int(gid)), "id")
-
-		}
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 
 	}
 
@@ -239,11 +209,7 @@ func ExpressionDraw() {
 
 }
 
-<<<<<<< HEAD
 func ExressionLoad(where string) Expression {
-=======
-func ExressionLoad(name string, by string) Expression {
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	var exp Expression
 	var eid sql.NullInt64
 	var ename sql.NullString
@@ -259,24 +225,15 @@ func ExressionLoad(name string, by string) Expression {
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
-<<<<<<< HEAD
 	log.Print("ExressionLoad load: " + where)
 	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph, dbgraph FROM expressions WHERE " + where)
-=======
-
-	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph FROM expressions where ?=?")
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	checkErr(err)
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
 	//	log.Print(q)
 
 	//rows, err := db.Query(q)
 
-<<<<<<< HEAD
 	err = query.QueryRow().Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph, &dbgraph)
-=======
-	err = query.QueryRow(by, name).Scan(&eid, &ename, &eexp, &eaxisname, &eapply, &ecomment, &dbres, &exportname, &graph)
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 	if err == nil {
 		exp.Id = int(eid.Int64)
 		exp.Name = ename.String
@@ -463,12 +420,21 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 }
 
 func GraphSetTheme(p *plot.Plot) {
-	p.X.Tick.Width = 2
+	p.Add(MyNewGrid())
+	p.X.LineStyle = draw.LineStyle{
+		Color: color.White,
+		Width: vg.Points(0.5),
+	}
+	p.X.Tick.Width = 1
 	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
 	p.X.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.X.Label.Font.Size = 15
+	p.Y.Label.Font.Size = 15
 	p.Y.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.X.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.Y.Tick.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	p.Y.Tick.Label.Font.Size = 14
+	p.X.Tick.Label.Font.Size = 10
 	p.X.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.Y.Tick.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.X.Tick.Label.Color = color.RGBA{R: 200, G: 200, B: 200, A: 255}

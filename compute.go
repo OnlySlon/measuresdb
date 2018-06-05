@@ -6,10 +6,10 @@ import (
 	"go/token"
 	"strconv"
 	"strings"
-
-	"github.com/alfredxing/calc/constants"
-	"github.com/alfredxing/calc/operators"
-	"github.com/alfredxing/calc/operators/functions"
+	//	"github.com/alfredxing/calc/operators"
+	//	"github.com/alfredxing/calc/operators"
+	//	"github.com/alfredxing/calc/operators/functions"
+	//	"github.com/alfredxing/calc/operators/functions"
 )
 
 var resHistory = []float64{}
@@ -27,12 +27,8 @@ func IsEval(key string) bool {
 }
 
 func MyEvalClear() {
-<<<<<<< HEAD
 	evalDB = make(map[string]string)
 
-=======
-	evalDB = nil
->>>>>>> 048cbc8221098281f5de2cd0c702811afedb6e78
 }
 
 func MyEvaluate(in string) (float64, error) {
@@ -50,7 +46,7 @@ ScanLoop:
 		if lit != "@" && back > -1 && len(resHistory) > 0 {
 			floats.Push(getHistory(back))
 
-			if prev == token.RPAREN || constants.IsConstant(prev.String()) {
+			if prev == token.RPAREN || IsConstant(prev.String()) {
 				evalUnprecedenced("*", ops, floats)
 			}
 			back = -1
@@ -61,15 +57,15 @@ ScanLoop:
 			break ScanLoop
 		case lit == "@":
 			back += 1
-		case constants.IsConstant(lit):
-			floats.Push(constants.GetValue(lit))
+		case IsConstant(lit):
+			floats.Push(GetValue(lit))
 			if prev == token.RPAREN || isOperand(prev) {
 				evalUnprecedenced("*", ops, floats)
 			}
 		case IsEval(lit):
 			//			log.Print("Eval:" + lit)
 			eval, _ := evalDB[lit]
-			r, err := MyEvaluate(eval)
+			r, err := MyEvaluate(eval) // recursive call
 			if err != nil {
 				return 0, errors.New("Cant calculate variable " + lit + " in expression")
 			}
@@ -81,10 +77,10 @@ ScanLoop:
 			}
 			floats.Push(val)
 
-			if prev == token.RPAREN || constants.IsConstant(prev.String()) || IsEval(prev.String()) {
+			if prev == token.RPAREN || IsConstant(prev.String()) || IsEval(prev.String()) {
 				evalUnprecedenced("*", ops, floats)
 			}
-		case functions.IsFunction(lit):
+		case IsFunction(lit):
 			if isOperand(prev) || prev == token.RPAREN {
 				evalUnprecedenced("*", ops, floats)
 			}
@@ -112,7 +108,7 @@ ScanLoop:
 				return 0, errors.New("Can't find matching parenthesis!")
 			}
 			if ops.Pos >= 0 {
-				if functions.IsFunction(ops.SafeTop()) {
+				if IsFunction(ops.SafeTop()) {
 					err := evalOp(ops.SafePop(), floats)
 					if err != nil {
 						return 0, err
@@ -162,14 +158,15 @@ func shouldPopNext(n1 string, n2 string) bool {
 	}
 	op1 := parseOperator(n1)
 	op2 := parseOperator(n2)
-	if op1.Associativity == operators.L {
+	if op1.Associativity == L {
 		return op1.Precedence <= op2.Precedence
 	}
 	return op1.Precedence < op2.Precedence
 }
 
 func evalOp(opName string, floats *FloatStack) error {
-	op := operators.FindOperatorFromString(opName)
+	//	log.Print("----------evalOp: " + opName)
+	op := FindOperatorFromString(opName)
 	if op == nil {
 		return errors.New("Either unmatched paren or unrecognized operator")
 	}
@@ -193,7 +190,7 @@ func isOperand(tok token.Token) bool {
 }
 
 func isOperator(lit string) bool {
-	return operators.IsOperator(lit)
+	return IsOperator(lit)
 }
 
 func isNegation(tok token.Token, prev token.Token) bool {
@@ -209,8 +206,8 @@ func parseFloat(lit string) (float64, error) {
 	return f, nil
 }
 
-func parseOperator(lit string) *operators.Operator {
-	return operators.FindOperatorFromString(lit)
+func parseOperator(lit string) *Operator {
+	return FindOperatorFromString(lit)
 }
 
 func getHistory(back int) float64 {

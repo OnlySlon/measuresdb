@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 	"unsafe"
 
 	winC "github.com/codyguo/win"
@@ -55,6 +56,10 @@ func (usb *USB) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintp
 			{
 				log.Printf("USB Connected -> %v", msg)
 				log.Print(notificationFilter.Dbcc_name)
+				time.Sleep(1 * time.Second)
+				var data_lookup = "d:/"
+				process_dir(data_lookup)
+				model.ResetRows()
 			}
 		case winC.DBT_DEVICEREMOVECOMPLETE:
 			log.Printf("USB Disconnected -> %v", msg)
