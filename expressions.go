@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"log"
 	"strconv"
@@ -59,7 +60,7 @@ func DxpressionDelete(name string) {
 
 func ExpressionNew(exp Expression) {
 
-	log.Print("ExpressionNew!!!")
+	//	log.Print("ExpressionNew!!!")
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
 
@@ -70,17 +71,17 @@ func ExpressionNew(exp Expression) {
 
 	checkErr(err)
 
-	res, err := stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph)
+	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph)
 
 	checkErr(err)
-	iid, _ := res.LastInsertId()
-	log.Print("New Expression -------- OK!!!! ID:", iid)
+	//	iid, _ := res.LastInsertId()
+	//	log.Print("New Expression -------- OK!!!! ID:", iid)
 
 }
 
 func ExpressionUpdate(exp Expression) {
 
-	log.Print("EEEEXP UPDATE:", exp)
+	//	log.Print("EEEEXP UPDATE:", exp)
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 	checkErr(err)
 	stmt, err := db.Prepare("UPDATE expressions SET name=?, exp=?, axisname=?, apply=?, comment=?, exportname=?, dbres=?, graph=?, dbgraph=? WHERE id=?")
@@ -88,9 +89,33 @@ func ExpressionUpdate(exp Expression) {
 
 	_, err = stmt.Exec(exp.Name, exp.ExpVal, exp.Axisname, exp.Apply, exp.Remarks, exp.ExportName, exp.DbRes, exp.Graph, exp.DbGraph, exp.Id)
 	checkErr(err)
-	log.Print("Update exp rows!!!")
+	//	log.Print("Update exp rows!!!")
 
 	db.Close()
+}
+
+func MasterMeasureFix() {
+	// Master match handler
+	masterMatch := false
+	fistCheck := -1
+	for i := range model.items {
+		if model.items[i].checked {
+			if fistCheck == -1 {
+				fistCheck = model.items[i].Index
+			}
+			if model.items[i].Index == MasterMeasure {
+				masterMatch = true
+			}
+		}
+	}
+	if fistCheck == -1 {
+		log.Print("No datasets found")
+		return
+	}
+	if masterMatch == false {
+		MasterMeasure = fistCheck
+	}
+
 }
 
 //mw *MyMainWindow
@@ -136,12 +161,12 @@ func ExpressionDraw(mw *MyMainWindow) {
 	for rows.Next() {
 		err = rows.Scan(&eid, &egraph, &exp, &exportname)
 		if len(egraph.String) > 0 {
-			log.Print("Begin draw graph '" + egraph.String + "'")
+			//			log.Print("Begin draw graph '" + egraph.String + "'")
 			graphs[egraph.String] = append(graphs[egraph.String], eid.Int64)
 		}
 	}
 	rows.Close()
-	log.Print(graphs)
+	//	log.Print(graphs)
 
 	/*
 			MyEvalAdd("B", "5+5")
@@ -155,7 +180,7 @@ func ExpressionDraw(mw *MyMainWindow) {
 
 		// func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
 		if len(exportname.String) > 0 {
-			log.Print("EXP " + exportname.String + "=" + exp.String)
+			//			log.Print("EXP " + exportname.String + "=" + exp.String)
 			MyEvalAdd(exportname.String, exp.String)
 		}
 	}
@@ -175,9 +200,9 @@ func ExpressionDraw(mw *MyMainWindow) {
 		p.X.Label.Text = "Frequency"
 
 		p.Y.Label.Text = "Magnitude (db)"
-		GraphSetTheme(p)
+
 		cnt++
-		log.Print("-------")
+		//		log.Print("-------")
 		for expid := range graphs[graph] {
 			//			log.Print("Dooo ", graphs[graph][expid])
 			gid := graphs[graph][expid]
@@ -188,17 +213,19 @@ func ExpressionDraw(mw *MyMainWindow) {
 			for i := range model.items {
 				if model.items[i].checked && model.items[i].Index != MasterMeasure {
 					vs = append(vs, model.items[i].Name)
-					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp.ExpVal, exp.DbGraph) // load all points from db and apply expression
+					pts, _ := dbPointsExpression(MasterMeasure, model.items[i].Index, exp.ExpVal, exp.DbGraph) // load all points from db and apply expression
 					vs = append(vs, pts)
-					log.Print("Records: ", cnt)
+					//					log.Print("Records: ", cnt)
 				}
 			}
+			GraphSetTheme(p, exp.DbGraph)
 		}
-		log.Print("Draw graph...")
+
+		//		log.Print("Draw graph...")
 		err = plotutil.AddLines(p,
 			vs...,
 		)
-		if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.74, fname); err != nil {
+		if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.72, fname); err != nil {
 			panic(err)
 		}
 		openImage(mw, fname, graph)
@@ -225,7 +252,7 @@ func ExressionLoad(where string) Expression {
 	db, err := sql.Open("sqlite3", "./db.sqlite3")
 
 	checkErr(err)
-	log.Print("ExressionLoad load: " + where)
+	//	log.Print("ExressionLoad load: " + where)
 	query, err := db.Prepare("SELECT id, name, exp, axisname, apply, comment, dbres, exportname, graph, dbgraph FROM expressions WHERE " + where)
 	checkErr(err)
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
@@ -268,7 +295,7 @@ func KnownExpressions(dbox *DropDownBox) []Species {
 
 	var q = "SELECT id, name FROM expressions"
 	// AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
-	log.Print(q)
+	//	log.Print(q)
 
 	rows, err := db.Query(q)
 	defer rows.Close()
@@ -296,7 +323,6 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 	var dlg *walk.Dialog
 	var db *walk.DataBinder
 	var acceptPB, cancelPB *walk.PushButton
-	log.Print("RunExpressionDialog!!!")
 
 	return Dialog{
 		AssignTo:      &dlg,
@@ -419,14 +445,69 @@ func RunExpressionDialog(owner walk.Form, animal *Expression) (int, error) {
 	}.Run(owner)
 }
 
-func GraphSetTheme(p *plot.Plot) {
+func DatasetFromExression(applyexp Expression) {
+	//	var exp Expression
+	var exportname sql.NullString
+	var exp sql.NullString
+	MasterMeasureFix()
+
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+
+	checkErr(err)
+	defer db.Close()
+
+	rows, err := db.Query("SELECT exportname, exp FROM expressions GROUP BY exportname")
+	MyEvalClear()
+	for rows.Next() {
+		err = rows.Scan(&exportname, &exp)
+
+		// func dbPointsExpression(ds1 int, ds2 int, myexp string) (plotter.XYs, int) {
+		if len(exportname.String) > 0 {
+			//			log.Print("EXP " + exportname.String + "=" + exp.String)
+			MyEvalAdd(exportname.String, exp.String)
+		}
+	}
+
+	for i := range model.items {
+		if model.items[i].checked {
+			log.Print(model.items[i].Name, model.items[i].Index)
+		}
+	}
+
+	for i := range model.items {
+		if model.items[i].checked && model.items[i].Index != MasterMeasure {
+			pts, _ := dbPointsExpression(MasterMeasure, model.items[i].Index, applyexp.ExpVal, applyexp.DbGraph) // load all points from db and apply expression
+			//					log.Print("Records: ", cnt)
+			log.Print(len(pts))
+
+			if len(pts) > 0 {
+				stmt, err := db.Prepare("INSERT INTO measures(hash, name, date, fname, points, comment, field1, field2, exression_id, parent_dataset1, parent_dataset2 ) values(?,?,?,?,?,?,?,?,?,?)")
+				checkErr(err)
+
+				log.Print("Insert new MEASURE: hash=" + hash + " name=" + name + " filename=" + filename)
+				res, err := stmt.Exec("", name, ts, filename, records_cnt_mag)
+
+			}
+
+		}
+	}
+
+}
+
+func GraphSetTheme(p *plot.Plot, db bool) {
 	p.Add(MyNewGrid())
 	p.X.LineStyle = draw.LineStyle{
 		Color: color.White,
 		Width: vg.Points(0.5),
 	}
 	p.X.Tick.Width = 1
-	p.X.Tick.Marker = readableDuration(p.X.Tick.Marker)
+	p.X.Tick.Marker = readableMhz(p.X.Tick.Marker)
+	if db {
+		p.Y.Tick.Marker = readabledB(p.Y.Tick.Marker)
+	} else {
+		p.Y.Tick.Marker = markerY(p.Y.Tick.Marker)
+	}
+
 	p.X.Label.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.X.Label.Font.Size = 15
 	p.Y.Label.Font.Size = 15
@@ -445,4 +526,42 @@ func GraphSetTheme(p *plot.Plot) {
 	p.X.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.Y.LineStyle.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	p.Legend.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+}
+
+func expressionTest() {
+	/*
+		settings := walk.NewIniFileSettings("settings.ini")
+		if err := settings.Load(); err != nil {
+			log.Fatal(err)
+		} else {
+			log.Print(settings.Get("testzz"))
+		}
+	*/
+	// ------------------------register math functions
+	//Z=Cos(PhA)
+
+	SetMagPhase(A, 11, 22)
+	SetMagPhase(B, 33, 46)
+
+	//res, err := MyEvaluate("phdelta(PhD(A) PhD(B))")
+	res, err := MyEvaluate("sum(1 2)")
+	log.Print("--------------------------------------->>>>>>>>>>>>>>>>>>>>>>>>")
+
+	if err != nil {
+		log.Print("Error: " + err.Error())
+		return
+	}
+	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
+
+	log.Print(res)
+
+	res, err = MyEvaluate("phdelta(Phd(A),Phd(B))")
+
+	if err != nil {
+		log.Print("Error: " + err.Error())
+		return
+	}
+	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
+
+	log.Print(res)
 }

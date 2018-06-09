@@ -47,6 +47,7 @@ ScanLoop:
 			floats.Push(getHistory(back))
 
 			if prev == token.RPAREN || IsConstant(prev.String()) {
+				//				log.Print("Fucj this #4")
 				evalUnprecedenced("*", ops, floats)
 			}
 			back = -1
@@ -60,6 +61,7 @@ ScanLoop:
 		case IsConstant(lit):
 			floats.Push(GetValue(lit))
 			if prev == token.RPAREN || isOperand(prev) {
+				//				log.Print("Fucj this #5")
 				evalUnprecedenced("*", ops, floats)
 			}
 		case IsEval(lit):
@@ -75,16 +77,24 @@ ScanLoop:
 			if err != nil {
 				return 0, err
 			}
+			//			log.Print("Operand float push:", val, " PREV=", prev)
 			floats.Push(val)
 
 			if prev == token.RPAREN || IsConstant(prev.String()) || IsEval(prev.String()) {
+				//				log.Print("Fuck this #1")
 				evalUnprecedenced("*", ops, floats)
 			}
 		case IsFunction(lit):
+			//			log.Print("FUNCTION (lit):" + lit + " Prev:" + prev.String())
 			if isOperand(prev) || prev == token.RPAREN {
+				//				log.Print("Fuck this #2")
+
 				evalUnprecedenced("*", ops, floats)
 			}
+			//			log.Print("ops.push!")
 			ops.Push(lit)
+		case tok == token.COMMA:
+
 		case isOperator(tok.String()):
 			op := tok.String()
 			if isNegation(tok, prev) {
@@ -93,6 +103,7 @@ ScanLoop:
 			evalUnprecedenced(op, ops, floats)
 		case tok == token.LPAREN:
 			if isOperand(prev) {
+				//				log.Print("Fuck this #3")
 				evalUnprecedenced("*", ops, floats)
 			}
 			ops.Push(tok.String())
@@ -143,6 +154,7 @@ ScanLoop:
 }
 
 func evalUnprecedenced(op string, ops *StringStack, floats *FloatStack) {
+	//	log.Print("evalUnprecedenced op=" + op)
 	for ops.Pos >= 0 && shouldPopNext(op, ops.SafeTop()) {
 		evalOp(ops.SafePop(), floats)
 	}
@@ -168,18 +180,19 @@ func evalOp(opName string, floats *FloatStack) error {
 	//	log.Print("----------evalOp: " + opName)
 	op := FindOperatorFromString(opName)
 	if op == nil {
-		return errors.New("Either unmatched paren or unrecognized operator")
+		return errors.New("Either unmatched paren or unrecognized operator '" + opName + "'")
 	}
 
 	var args = make([]float64, op.Args)
 	for i := op.Args - 1; i >= 0; i-- {
 		arg, err := floats.Pop()
+		//		log.Print("_POP_ARG_ ", arg, "   args=", op.Args, " err=", err)
 		if err != nil {
 			return errors.New("Not enough arguments to operator!")
 		}
 		args[i] = arg
 	}
-
+	//	log.Print("CALL FUNCTION:" + op.Name)
 	floats.Push(op.Operation(args))
 
 	return nil

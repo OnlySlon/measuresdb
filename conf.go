@@ -23,6 +23,7 @@ func ConfigTest() {
 
 func ConfigLoad() {
 
+	log.Print("----LOAD-CONFIG----")
 	settings := walk.NewIniFileSettings("settings.ini")
 	settings.SetPortable(true)
 
@@ -44,6 +45,7 @@ func ConfigLoad() {
 }
 
 func ConfigSave() {
+	log.Print("----SAVE-CONFIG----" + conf.MonitoringDir)
 	settings := walk.NewIniFileSettings("settings.ini")
 	settings.SetPortable(true)
 	if err := settings.Load(); err != nil {
@@ -55,8 +57,8 @@ func ConfigSave() {
 	}
 }
 
-func ConfigClick(mw walk.MainWindow) {
-	if cmd, err := ConfigRunDialog(mwexp); err != nil {
+func ConfigClick(owner walk.Form) {
+	if cmd, err := ConfigRunDialog(owner); err != nil {
 		log.Print(err)
 	} else if cmd == walk.DlgCmdOK {
 		ConfigSave()
@@ -77,10 +79,10 @@ func ConfigRunDialog(owner walk.Form) (int, error) {
 		CancelButton:  &cancelPB,
 		DataBinder: DataBinder{
 			AssignTo:       &db,
-			DataSource:     conf,
+			DataSource:     &conf,
 			ErrorPresenter: ToolTipErrorPresenter{},
 		},
-		MinSize: Size{640, 300},
+		MinSize: Size{640, 200},
 		Layout:  VBox{},
 		Children: []Widget{
 			Composite{
@@ -93,17 +95,16 @@ func ConfigRunDialog(owner walk.Form) (int, error) {
 						Text: Bind("UsbDriveLetter"),
 					},
 
-					VSpacer{
-						ColumnSpan: 2,
-						Size:       8,
-					},
-
 					Label{
 						//						ColumnSpan: 2,
 						Text: "Monitoring Dir:",
 					},
 					LineEdit{
 						Text: Bind("MonitoringDir"),
+					},
+					Label{
+						ColumnSpan: 2,
+						Text:       "* For apply changes need restart program",
 					},
 				},
 			},
@@ -118,9 +119,14 @@ func ConfigRunDialog(owner walk.Form) (int, error) {
 							if err := db.Submit(); err != nil {
 								log.Print(err)
 								return
+							} else {
+								dlg.Accept()
+								ConfigSave()
+								ConfigLoad()
+								dlg.Accept()
+
 							}
 
-							dlg.Accept()
 						},
 					},
 					PushButton{

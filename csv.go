@@ -186,24 +186,6 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 
 	pts := make(plotter.XYs, dbPointsCount(ds1))
 
-	var (
-		cPh1 = &Constant{
-			Name:  "PhA",
-			Value: 0,
-		}
-		cMag1 = &Constant{
-			Name:  "MagA",
-			Value: 0,
-		}
-		cPh2 = &Constant{
-			Name:  "PhB",
-			Value: 0,
-		}
-		cMag2 = &Constant{
-			Name:  "MagB",
-			Value: 0,
-		}
-	)
 	var freq int64
 	var mag1 float64
 	var ph1 float64
@@ -215,7 +197,6 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 	checkErr(err)
 
 	var q = "SELECT m1.freq, m1.magnitude, m1.degrees, m2.magnitude, m2.degrees FROM measure_data as m1 LEFT join measure_data as m2 WHERE m1.freq=m2.freq AND m1.measure_id=" + strconv.Itoa(ds1) + " AND m2.measure_id=" + strconv.Itoa(ds2) + " order by m1.freq"
-	//	log.Print(q)
 
 	rows, err := db.Query(q)
 	defer rows.Close()
@@ -228,14 +209,6 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 	for rows.Next() {
 
 		err = rows.Scan(&freq, &mag1, &ph1, &mag2, &ph2)
-		cMag1.Value = mag1
-		cMag2.Value = mag2
-		cPh1.Value = ph1
-		cPh2.Value = ph2
-		ConstRegister(cMag1)
-		ConstRegister(cMag2)
-		ConstRegister(cPh1)
-		ConstRegister(cPh2)
 
 		SetMagPhase(A, mag1, ph1)
 		SetMagPhase(B, mag2, ph2)
@@ -255,7 +228,7 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 
 			} else {
 				if cnt < 2 {
-					log.Println("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
+					//					log.Println("OK  RESULT!!! Freq=", freq, " PhA=", ph1, " PhB=", ph2, "  MagA=", mag1, " MagB=", mag2, " res=", res)
 					cnt++
 				}
 			}
@@ -266,7 +239,10 @@ func dbPointsExpression(ds1 int, ds2 int, myexp string, dbconvert bool) (plotter
 			idx++
 		}
 	}
-	log.Print("Nan Results: ", nans)
+	if nans > 0 {
+		log.Print("Nan Results: ", nans)
+	}
+
 	return pts, idx
 }
 
@@ -319,7 +295,7 @@ type tickerFunc func(min, max float64) []plot.Tick
 
 func (tkfn tickerFunc) Ticks(min, max float64) []plot.Tick { return tkfn(min, max) }
 
-func readableDuration(marker plot.Ticker) plot.Ticker {
+func readableMhz(marker plot.Ticker) plot.Ticker {
 	return tickerFunc(func(min, max float64) []plot.Tick {
 		var out []plot.Tick
 		for _, t := range marker.Ticks(min, max) {
@@ -333,33 +309,33 @@ func readableDuration(marker plot.Ticker) plot.Ticker {
 	})
 }
 
-/*
-type LogTicks struct{}
+func markerY(marker plot.Ticker) plot.Ticker {
+	return tickerFunc(func(min, max float64) []plot.Tick {
+		var out []plot.Tick
+		for _, t := range marker.Ticks(min, max) {
+			t.Label = strconv.FormatFloat(t.Value, 'f', 1, 64)
+			//			log.Println("Min=", min, " ", max, " ", int64(t.Value)/1000000, " ", out)
 
-var _ Ticker = LogTicks2{}
-
-func (LogTicks2) Ticks(min, max float64) []Tick {
-	if min <= 0 {
-		panic("Values must be greater than 0 for a log scale.")
-	}
-
-	val := math.Pow10(int(math.Log10(min)))
-	max = math.Pow10(int(math.Ceil(math.Log10(max))))
-	var ticks []Tick
-	for val < max {
-		for i := 1; i < 10; i++ {
-			if i == 1 {
-				ticks = append(ticks, Tick{Value: val, Label: formatFloatTick(val, -1)})
-			}
-			ticks = append(ticks, Tick{Value: val * float64(i)})
+			// time.Duration(t.Value).String()
+			out = append(out, t)
 		}
-		val *= 10
-	}
-	ticks = append(ticks, Tick{Value: val, Label: formatFloatTick(val, -1)})
-
-	return ticks
+		return out
+	})
 }
-*/
+
+func readabledB(marker plot.Ticker) plot.Ticker {
+	return tickerFunc(func(min, max float64) []plot.Tick {
+		var out []plot.Tick
+		for _, t := range marker.Ticks(min, max) {
+			t.Label = strconv.FormatFloat(t.Value, 'f', 1, 64) + " dB"
+			//			log.Println("Min=", min, " ", max, " ", int64(t.Value)/1000000, " ", out)
+
+			// time.Duration(t.Value).String()
+			out = append(out, t)
+		}
+		return out
+	})
+}
 
 func drawModel(mw *MyMainWindow, tpe int) {
 
@@ -376,7 +352,7 @@ func drawModel(mw *MyMainWindow, tpe int) {
 	if tpe == GraphMag {
 		fname = "./mag.png"
 		p.Title.Text = "Magnitude graph"
-		p.X.Label.Text = "Freq"
+		p.X.Label.Text = "Frequency"
 		p.Y.Label.Text = "Magnitude (db)"
 
 	} else {
@@ -418,7 +394,7 @@ func drawModel(mw *MyMainWindow, tpe int) {
 	vs := []interface{}{}
 	// ----------------------- MAGNITUDE -------------------------
 	if tpe == GraphMag {
-		log.Print("-------------------- Magnitude GRAPH---------------------------")
+		//		log.Print("-------------------- Magnitude GRAPH---------------------------")
 		for i := range model.items {
 			if model.items[i].checked {
 				log.Print("Add dataset:" + model.items[i].Name)
@@ -429,58 +405,6 @@ func drawModel(mw *MyMainWindow, tpe int) {
 		}
 	}
 
-	// ------------------- PHASE DIFF ----------------------------
-	// func dbPointsExpression(ds1 int, ds2 int, exp string) (plotter.XYs, int)
-	/*
-		if tpe == GraphPhase {
-			log.Print("-------------------- PHASE GRAPH---------------------------")
-			for i := range model.items {
-				if model.items[i].checked && model.items[i].Index != MasterMeasure {
-					log.Print("------Add Phase dataset:" + model.items[i].Name)
-					vs = append(vs, model.items[i].Name)
-					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "phdelta(PhA PhB)")
-					//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "ACosD(CosD(PhA-PhB))")
-					log.Print("Records: ", cnt)
-					vs = append(vs, pts)
-				}
-			}
-			//		return
-		}
-
-		if tpe == GraphRdb {
-			fname = "./r.png"
-			p.Title.Text = "r(db) graph"
-			p.X.Label.Text = "Freq"
-			p.Y.Label.Text = "r(db)"
-
-			log.Print("-------------------- R GRAPH---------------------------")
-			for i := range model.items {
-				if model.items[i].checked && model.items[i].Index != MasterMeasure {
-					log.Print("------Add R dataset:" + model.items[i].Name)
-					vs = append(vs, model.items[i].Name)
-					//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "20 * log(sqrt((MagA ^ 2 + MagB ^ 2 + sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB)))) / (MagA ^ 2 + MagB ^ 2 - sqrt(MagA^4+MagB^4+2*(MagA^2)*(MagB^2)*cos(2*(PhA-PhB))))))")
-					//pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))")
-					//				pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, "MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos(2*(PhA-PhB)))/(MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))) ")
-					//var exp = "((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*cos((phdelta(PhA PhB))))) / (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*MagA^2*MagB^2*cos(phdelta(PhA PhB)))))"
-					//var exp = "
-					//var exp = "sqrt((MagA^2 + MagB^2 + sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))) /  (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(2 * phdelta(PhA PhB)))))"
-					// (MagA^2 + MagB^2 - sqrt(MagA^4 + MagB^4 + 2*(MagA^2)*(MagB^2)*cos(phdelta(PhA PhB))))
-
-					//				var exp = "20*Log10(sqrt((MagA^2+MagB^2+sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
-					//var exp = "20*Log10(sqrt(((MagA^2)+(MagB^2)+sqrt((MagA^4)+(MagB^4)+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB))))) / (MagA^2+MagB^2-sqrt(MagA^4+MagB^4+2*MagA^2*MagB^2*cos(torad(2*phdelta(PhA PhB)))))))"
-
-					var exp = "20*Log10(Sqr((MagA^2+MagB^2+Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB)))) / (MagA^2+MagB^2-Sqr(MagA^4+MagB^4+2*MagA^2*MagB^2*CosD(2*phdelta(PhA PhB))))))"
-					pts, cnt := dbPointsExpression(MasterMeasure, model.items[i].Index, exp)
-					log.Print("Records: ", cnt)
-
-					vs = append(vs, pts)
-				}
-			}
-			//		return
-		}
-	*/
-
-	log.Print("Draw graph...")
 	err = plotutil.AddLines(p,
 		vs...,
 	)
@@ -496,11 +420,11 @@ func drawModel(mw *MyMainWindow, tpe int) {
 	//p.Y.Tick.Marker = plot.LogTicks{}
 	// plot.ConstantTicks([]plot.Tick{{-31, "0"}, {-30, ""}, {-29, "zzz"}, {75, "-sss"}, {100, "ddd"}})
 
-	GraphSetTheme(p)
+	GraphSetTheme(p, true)
 	//	p.Save(15*vg.Inch, 8*vg.Inch, "points.pdf")
 	// Save the plot to a PNG file.
 
-	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
+	//	log.Print("Draw image:", vg.Points(float64(imgW)), vg.Points(float64(imgH)))
 	if err := p.Save(vg.Points(float64(imgW))*0.75, vg.Points(float64(imgH))*0.72, fname); err != nil {
 		panic(err)
 	}
@@ -521,7 +445,7 @@ func file2db(fpath string) {
 	//	extension := filepath.Ext(fpath)
 	filename := filepath.Base(fpath)
 
-	log.Print("File2db: " + fpath)
+	//	log.Print("File2db: " + fpath)
 	hash, err := hash_file_md5(fpath)
 	if err != nil {
 		log.Print("Unable to calculate md5 hash")
@@ -547,9 +471,6 @@ func file2db(fpath string) {
 		return
 	}
 
-	//	stmt, err = db.Prepare("")
-
-	/* ----------------------------------------------- START LOAD DATA */
 	f, _ := os.Open(fpath)
 
 	var begins = 0
@@ -580,7 +501,7 @@ func file2db(fpath string) {
 		}
 
 		if strings.Index(ln, "! TIMESTAMP ") > -1 {
-			log.Print("GOT TIMESTAMP!!!!!!" + ln)
+			//			log.Print("GOT TIMESTAMP!!!!!!" + ln)
 			var layout = "! TIMESTAMP Monday, 2 January 2006 15:04:05"
 
 			ts, err = time.Parse(layout, ln)
@@ -591,12 +512,9 @@ func file2db(fpath string) {
 
 		}
 		split := strings.Split(ln, ",")
-		//		fmt.Printf("%q LENSPLIT=%u\n", strings.Split(ln, ","), len(split))
 		if len(split) == 2 {
 			f := split[0]
 			val := split[1]
-			//			fmt.Println(f)
-			//			fmt.Println(val)
 			freq, err := strconv.ParseFloat(f, 64)
 			if err != nil {
 				continue
@@ -623,10 +541,6 @@ func file2db(fpath string) {
 				records_cnt_phase++
 			}
 			point++
-			//records = append(records, s)
-			//			fmt.Printf("%i ", point)
-			///			records[point] = s
-			///data[point] = append(data[point], s)
 		}
 
 	}
@@ -667,15 +581,7 @@ func process_dir(dir string) {
 	}
 
 	for _, f := range files {
-
-		//		fmt.Println(filepath.Ext(f.Name()))
-		log.Print(filepath.Ext(f.Name()))
 		if filepath.Ext(f.Name()) == ".csv" {
-			//			var filename = f.Name()
-			//			var extension = filepath.Ext(filename)
-			//			var name = filename[0 : len(filename)-len(extension)]
-			//			fmt.Println(name)
-			//			fmt.Println(hash_file_md5(dir + f.Name()))
 			file2db(dir + "\\" + f.Name())
 
 		}
@@ -764,7 +670,6 @@ func (m *FooModel) Sort(col int, order walk.SortOrder) error {
 }
 
 func (m *FooModel) ResetRows() {
-	// Create some random data. zzzzzzzzzz
 
 	var count = 0
 	//	fmt.Println("count=", count)
@@ -794,8 +699,6 @@ func (m *FooModel) ResetRows() {
 		err = rows.Scan(&measure_id, &name, &date, &fname, &comment, &points)
 		checkErr(err)
 
-		//dte, _ := time.Parse("2014-09-12 11:45:26", date.String)
-		//		log.Print("----", pidx, measure_id)
 		m.items[pidx] = &Foo{
 			checked: false,
 			Index:   measure_id,
@@ -803,9 +706,8 @@ func (m *FooModel) ResetRows() {
 			Date:    date,
 			Points:  points.Int64,
 			Comment: comment.String,
-			//			Name:     name.String, // strings.Repeat("*", rand.Intn(5)+1),
-			Baz:  rand.Float64() * 1000,
-			Quux: time.Unix(rand.Int63n(now.Unix()), 0),
+			Baz:     rand.Float64() * 1000,
+			Quux:    time.Unix(rand.Int63n(now.Unix()), 0),
 		}
 		//			Quux:    time.Unix(rand.Int63n(now.Unix()), 0),
 
@@ -813,19 +715,6 @@ func (m *FooModel) ResetRows() {
 	}
 
 	db.Close()
-	//return pts
-	/*
-		now := time.Now()
-
-		for i := range m.items {
-			m.items[i] = &Foo{
-				Index: i,
-				Bar:   strings.Repeat("*", rand.Intn(5)+1),
-				Baz:   rand.Float64() * 1000,
-				Quux:  time.Unix(rand.Int63n(now.Unix()), 0),
-			}
-		}
-	*/
 	// Notify TableView and other interested parties about the reset.
 	m.PublishRowsReset()
 
@@ -837,74 +726,26 @@ func main() {
 	var ExpEditButton *walk.PushButton
 	var ExpNewButton *walk.PushButton
 	var ExpDelButton *walk.PushButton
-	//	dbPointsExpression(759, 760, "test")
-	//	return
 
 	OpsRegister()
 
-	//	ExpressionDraw()
+	expressionTest()
 	//	return
 
 	app := walk.App()
 	app.SetOrganizationName("RelizIT")
 	app.SetProductName("MeasureDB")
 
-	ConfigTest()
-
-	settings := walk.NewIniFileSettings("settings.ini")
-	if err := settings.Load(); err != nil {
-		log.Fatal(err)
-	} else {
-		log.Print(settings.Get("testzz"))
-	}
-
-	// ------------------------register math functions
-	//Z=Cos(PhA)
-	/*
-		var (
-			constA = &Constant{
-				Name:  "A",
-				Value: 0,
-			}
-			constB = &Constant{
-				Name:  "B",
-				Value: 0,
-			}
-		)
-		ConstRegister(constA)
-		ConstRegister(constB)
-	*/
-	SetMagPhase(A, 11, 22)
-	SetMagPhase(B, 33, 44)
-
-	//	MyEvalAdd("C", "5+5")
-	//	MyEvalAdd("D", "sin(30)+10 + C")
-
-	res, err := MyEvaluate("phd(B)")
-	//res, err := MyEvaluate("Sqr((Mag(A)^2+Mag(B)^2+sqr(Mag(A)^4+Mag(B)^4+2*Mag(A)^2*Mag(B)^2*CosD(2*(PhD(A)-PhD(B))))) / (Mag(A)^2+Mag(B)^2-sqr(Mag(A)^4+Mag(B)^4+2*Mag(A)^2*Mag(B)^2*CosD(2*(PhD(A)-PhD(B))))))")
-
-	if err != nil {
-		log.Print("Error: " + err.Error())
-		return
-	}
-	fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
-
-	log.Print(res)
-	//return
+	ConfigLoad()
 
 	mw := new(MyMainWindow)
-	var openAction *walk.Action
-	var MagGraphAction *walk.Action
+	//	var openAction *walk.Action
+	//	var MagGraphAction *walk.Action
 	var PhaseGraphAction *walk.Action
-	////////////////////////////////
 
-	//	var data_lookup = "./csv/"
-	//	process_dir(data_lookup)
-	//////////////
-	//	return
 	boldFont, _ := walk.NewFont("Segoe UI", 9, walk.FontBold)
-	goodIcon, _ := walk.Resources.Icon("./img/check.ico")
-	badIcon, _ := walk.Resources.Icon("./img/stop.ico")
+	//	goodIcon, _ := walk.Resources.Icon("./img/check.ico")
+	//	badIcon, _ := walk.Resources.Icon("./img/stop.ico")
 
 	barBitmap, err := walk.NewBitmap(walk.Size{100, 1})
 	if err != nil {
@@ -934,38 +775,39 @@ func main() {
 	var expmodel = new(DropDownBox)
 	expmodel.model = NewDropDownBoxModel()
 	KnownExpressions(expmodel)
-
-	//expobj := new(Expression)
-	///////////////////////////////////////
-
-	///
+	bmp, err := walk.Resources.Bitmap("1001")
+	log.Print(bmp, err)
+	//	return
+	//	img, _ := walk.Resources.Bitmap("102")
 	if err := (MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "RelizIT measures DB",
-
+		Icon:     "102",
 		MenuItems: []MenuItem{
 			Menu{
 				Text: "&File",
 				Items: []MenuItem{
-					Action{
-						AssignTo:    &openAction,
-						Text:        "&Open",
-						Image:       "./img/open.png",
-						OnTriggered: mw.openAction_Triggered,
-					},
-					Action{
-						AssignTo:    &MagGraphAction,
-						Text:        "&Create Graph",
-						Image:       "./img/plus.png",
-						OnTriggered: mw.MagGraphAction_Triggered,
-					},
-					Action{
-						AssignTo:    &PhaseGraphAction,
-						Text:        "&Create ",
-						Image:       "./img/document-properties.png",
-						OnTriggered: mw.PhaseGraphAction_Triggered,
-					},
-					Separator{},
+					/*
+						Action{
+							AssignTo:    &openAction,
+							Text:        "&Open",
+							Image:       "./img/open.png",
+							OnTriggered: mw.openAction_Triggered,
+						},
+						Action{
+							AssignTo:    &MagGraphAction,
+							Text:        "&Create Graph",
+							Image:       "./img/plus.png",
+							OnTriggered: mw.MagGraphAction_Triggered,
+						},
+						Action{
+							AssignTo:    &PhaseGraphAction,
+							Text:        "&Create ",
+							Image:       "./img/document-properties.png",
+							OnTriggered: mw.PhaseGraphAction_Triggered,
+						},
+						Separator{},
+					*/
 					Action{
 						AssignTo:    &PhaseGraphAction,
 						Text:        "&Options ",
@@ -979,25 +821,25 @@ func main() {
 					},
 				},
 			},
-
-			Menu{
-				Text: "E&xpressions",
-				Items: []MenuItem{
-					Action{
-						AssignTo:    &openAction,
-						Text:        "Expressions Editor",
-						Image:       "./img/open.png",
-						OnTriggered: mw.openAction_Triggered,
-					},
-					Action{
-						AssignTo:    &MagGraphAction,
-						Text:        "Constants Editor",
-						Image:       "./img/plus.png",
-						OnTriggered: mw.MagGraphAction_Triggered,
+			/*
+				Menu{
+					Text: "E&xpressions",
+					Items: []MenuItem{
+						Action{
+							AssignTo:    &openAction,
+							Text:        "Expressions Editor",
+							Image:       "./img/open.png",
+							OnTriggered: mw.openAction_Triggered,
+						},
+						Action{
+							AssignTo:    &MagGraphAction,
+							Text:        "Constants Editor",
+							Image:       "./img/plus.png",
+							OnTriggered: mw.MagGraphAction_Triggered,
+						},
 					},
 				},
-			},
-
+			*/
 			Menu{
 				Text: "&Help",
 				Items: []MenuItem{
@@ -1008,13 +850,14 @@ func main() {
 				},
 			},
 		},
-
-		ToolBarItems: []MenuItem{
-			ActionRef{&openAction},
-			ActionRef{&MagGraphAction},
-			ActionRef{&PhaseGraphAction},
-		},
-		MinSize: Size{320, 800},
+		/*
+			ToolBarItems: []MenuItem{
+				ActionRef{&openAction},
+				ActionRef{&MagGraphAction},
+				ActionRef{&PhaseGraphAction},
+			},
+		*/
+		//		MinSize: Size{320, 800},
 
 		Layout: VBox{MarginsZero: true},
 		Children: []Widget{
@@ -1026,7 +869,7 @@ func main() {
 						AssignTo: &mw.tabWidget,
 
 						OnSizeChanged: func() {
-							log.Printf("Main window size changed", mw.tabWidget.Width())
+							//							log.Printf("Main window size changed", mw.tabWidget.Width())
 							imgW = int64(mw.tabWidget.Width())
 							imgH = int64(mw.tabWidget.Height())
 
@@ -1034,8 +877,9 @@ func main() {
 					},
 					Composite{
 						AssignTo: &composite,
-						//						MinSize:  Size{0, 600},
-						MaxSize: Size{450, 800},
+						MinSize:  Size{420, 000},
+						MaxSize:  Size{420, 0},
+
 						DataBinder: DataBinder{
 							AssignTo: &expdb,
 						},
@@ -1054,8 +898,8 @@ func main() {
 								//Model:         KnownExpressions(),
 								Model: expmodel.model,
 								OnCurrentIndexChanged: func() {
-									log.Print(combo.CurrentIndex())
-									log.Print(combo.Text())
+									//									log.Print(combo.CurrentIndex())
+									//									log.Print(combo.Text())
 									//									combo.SetCurrentIndex(1)
 								},
 							},
@@ -1063,29 +907,18 @@ func main() {
 							PushButton{
 								AssignTo:   &ExpEditButton,
 								ColumnSpan: 1,
-								Text:       "Edit Expression",
-								Image:      "./img/document-properties.png",
+								Text:       " Edit Expression",
+								Image:      "1002", //"./img/notes.png",
 
 								OnClicked: func() {
-									//									combo.SetCurrentIndex(2)
-									// exp := new(Expression)
-									// var exp Expression
-									log.Print("Epression load")
-
 									exp := ExressionLoad("name=\"" + combo.Text() + "\"")
-									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
 									} else if cmd == walk.DlgCmdOK {
-										log.Print("OK button")
-										log.Printf("%+v", exp)
+										//										log.Print("OK button")
+										//										log.Printf("%+v", exp)
 										ExpressionUpdate(exp)
 										combo.Invalidate()
-										//										combo.Model.ItemsRe ggggggggggggggg
-										///combo.PublishRowsReset()
-										//										model := combo.Model()
-										//expdb.Reset()
-										//combo.Model().Reset()
 										KnownExpressions(expmodel)
 										combo.SetCurrentIndex(0)
 									}
@@ -1095,19 +928,17 @@ func main() {
 							PushButton{
 								AssignTo:   &ExpNewButton,
 								ColumnSpan: 1,
-								Text:       "New Expression",
-								Image:      "./img/document-new.png",
+								Text:       " New Expression",
+								Image:      "1001", //"./img/create.png",
 								OnClicked: func() {
 									//exp := new(Expression)
 									// var exp Expression
 									var exp Expression
 									exp.Id = -1
-									log.Print("Call dialog")
+									//									log.Print("Call dialog")
 									if cmd, err := RunExpressionDialog(mw, &exp); err != nil {
 										log.Print(err)
 									} else if cmd == walk.DlgCmdOK {
-										log.Print("OK button")
-										log.Printf("%+v", exp)
 										ExpressionNew(exp)
 										KnownExpressions(expmodel)
 										combo.SetCurrentIndex(0)
@@ -1118,8 +949,8 @@ func main() {
 							PushButton{
 								AssignTo:   &ExpDelButton,
 								ColumnSpan: 1,
-								Text:       "Delete Expression",
-								Image:      "./img/system-shutdown.png",
+								Text:       " Delete Expression",
+								Image:      "1003", //"./img/erase.png",
 								OnClicked: func() {
 									model.PublishRowsReset()
 									ret := walk.MsgBox(mw, "Delete expression", "Delete expression '"+combo.Text()+"'", walk.MsgBoxYesNo|walk.MsgBoxIconQuestion)
@@ -1144,7 +975,6 @@ func main() {
 										AssignTo: &showContextMenu,
 										Text:     "Draw dataset",
 										OnTriggered: func() {
-											log.Printf("Жмак!")
 											mw.MagGraphAction_Triggered()
 										},
 									},
@@ -1160,13 +990,26 @@ func main() {
 											}
 										},
 									},
+
 									Action{
 										AssignTo: &showContextMenu,
-										Text:     "MenutItem",
+										Text:     "Apply sel. Expression",
 										OnTriggered: func() {
-											log.Printf("Жмак!")
+											exp := ExressionLoad("name=\"" + combo.Text() + "\"")
+											log.Print("Apply expression:", exp.ExpVal)
+											DatasetFromExression(exp)
 										},
 									},
+
+									/*
+										Action{
+											AssignTo: &showContextMenu,
+											Text:     "MenutItem",
+											OnTriggered: func() {
+												log.Printf("Жмак!")
+											},
+										},
+									*/
 								},
 								Columns: []TableViewColumn{
 									{Title: "#"},
@@ -1204,15 +1047,15 @@ func main() {
 										}
 
 									case 2:
-
-										if item.Baz >= 900.0 {
-											style.TextColor = walk.RGB(0, 191, 0)
-											style.Image = goodIcon
-										} else if item.Baz < 100.0 {
-											style.TextColor = walk.RGB(255, 0, 0)
-											style.Image = badIcon
-										}
-
+										/*
+											if item.Baz >= 900.0 {
+												style.TextColor = walk.RGB(0, 191, 0)
+												style.Image = goodIcon
+											} else if item.Baz < 100.0 {
+												style.TextColor = walk.RGB(255, 0, 0)
+												style.Image = badIcon
+											}
+										*/
 									case 3:
 										if item.Quux.After(time.Now().Add(-365 * 24 * time.Hour)) {
 											style.Font = boldFont
@@ -1278,15 +1121,20 @@ func main() {
 
 	//	lv.PostAppendText("Hello!\n")
 	//	lv.PostAppendText("This is a log\n")
-	//	lv.SetClientSize(walk.Size{500, 500})
+	lv.SetClientSize(walk.Size{0, 300})
 
 	log.SetOutput(lv)
 
-	log.Printf("-----------------------------imgW=", imgW, " imgH=", imgH, lv)
-
-	log.Print("|      Showtime         |")
+	log.Print(">>>> SHOWTIME <<<<")
 	log.Print("Database.......... OK")
 	log.Print("Measures.......... ", dbCountMeasures())
+
+	process_dir(conf.MonitoringDir)
+
+	go func() {
+		log.Print("Directory '" + conf.MonitoringDir + "' monitor started.")
+		DirectoryChangeNotification(conf.MonitoringDir)
+	}()
 
 	//	openImage(mw, "./points.png")
 	//	return
@@ -1294,20 +1142,10 @@ func main() {
 	//lv.SetHeight(50)
 	//lv.SetX(50)
 
-	/////////////////
-	/*
-		res, err := compute.Evaluate("sin(1)*15.1/cos(15)")
-		if err != nil {
-			return
-		}
-		fmt.Printf("%s\n", strconv.FormatFloat(res, 'G', -1, 64))
-	*/
-	//////////////////
-
 	// Groutine
 	go func() {
 		// wwwwwwwwwwwwwwwwwwww
-		log.Print("Directory monitor started.")
+		log.Print("USB monitor started.")
 
 		usb, err := NewUSB()
 		if err != nil {
@@ -1324,7 +1162,7 @@ func main() {
 			//			log.Println("Tic" + "\r\n")
 		}
 	}()
-	defer settings.Save()
+	//	defer settings.Save()
 
 	mw.MainWindow.Run()
 
@@ -1346,23 +1184,6 @@ func (mw *MyMainWindow) openAction_Triggered() {
 
 func (mw *MyMainWindow) MagGraphAction_Triggered() {
 
-	log.Print("graph action triggered")
-	log.Print(model.items)
-
-	/*
-		if mw.tabWidget.Pages().Len() == 2 {
-			mw.tabWidget.Pages().RemoveAt(0)
-			mw.tabWidget.Pages().RemoveAt(0)
-
-			}*/
-
-	// HERE THE FUCK!
-
-	if mw.tabWidget.Pages().Len() == 3 {
-		//		mw.tabWidget.Pages().RemoveAt(0)
-		//		mw.tabWidget.Pages().RemoveAt(0)
-		//		mw.tabWidget.Pages().RemoveAt(2)
-	}
 	// clean da images
 	for img := range tabimgDB {
 		img.Dispose()
@@ -1410,81 +1231,6 @@ func (mw *MyMainWindow) PhaseGraphAction_Triggered() {
 		}
 	*/
 }
-
-/*
-func (mw *MyMainWindow) openImage() error {
-	dlg := new(walk.FileDialog)
-
-	dlg.FilePath = mw.prevFilePath
-	dlg.Filter = "Image Files (*.emf;*.bmp;*.exif;*.gif;*.jpeg;*.jpg;*.png;*.tiff)|*.emf;*.bmp;*.exif;*.gif;*.jpeg;*.jpg;*.png;*.tiff"
-	dlg.Title = "Select an Image"
-
-	if ok, err := dlg.ShowOpen(mw); err != nil {
-		return err
-	} else if !ok {
-		return nil
-	}
-
-	mw.prevFilePath = dlg.FilePath
-
-	img, err := walk.NewImageFromFile(dlg.FilePath)
-	if err != nil {
-		return err
-	}
-
-	var succeeded bool
-	defer func() {
-		if !succeeded {
-			img.Dispose()
-		}
-	}()
-
-	page, err := walk.NewTabPage()
-	if err != nil {
-		return err
-	}
-
-	if page.SetTitle(path.Base(strings.Replace(dlg.FilePath, "\\", "/", -1))); err != nil {
-		return err
-	}
-	page.SetLayout(walk.NewHBoxLayout())
-
-	defer func() {
-		if !succeeded {
-			page.Dispose()
-		}
-	}()
-
-	imageView, err := walk.NewImageView(page)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if !succeeded {
-			imageView.Dispose()
-		}
-	}()
-
-	imageView.SetMode(walk.ImageViewModeShrink)
-
-	if err := imageView.SetImage(img); err != nil {
-		return err
-	}
-
-	if err := mw.tabWidget.Pages().Add(page); err != nil {
-		return err
-	}
-
-	if err := mw.tabWidget.SetCurrentIndex(mw.tabWidget.Pages().Len() - 1); err != nil {
-		return err
-	}
-
-	succeeded = true
-
-	return nil
-}
-*/
 
 func openImage(mw *MyMainWindow, fpath string, title string) error {
 
@@ -1542,7 +1288,8 @@ func openImage(mw *MyMainWindow, fpath string, title string) error {
 		}
 	}()
 
-	imageView.SetMode(walk.ImageViewModeShrink)
+	//	imageView.SetMode(walk.ImageViewModeShrink)
+	imageView.SetMode(walk.ImageViewModeStretch)
 
 	if err := imageView.SetImage(img); err != nil {
 		return err

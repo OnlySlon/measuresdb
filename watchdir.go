@@ -5,6 +5,7 @@ package main
 #include <windows.h>
 #include <stdlib.h>
 extern void goCallbackFileChange(void);
+extern void goCallbackFileSomeError(void);
 // https://msdn.microsoft.com/de-de/library/windows/desktop/aa365261(v=vs.85).aspx
 static inline void WatchDirectory(const char* dir) {
   DWORD waitStatus;
@@ -21,12 +22,15 @@ static inline void WatchDirectory(const char* dir) {
 		FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_DIR_NAME
 	);
   if (handle == INVALID_HANDLE_VALUE){
-    printf("\n ERROR: FindFirstChangeNotification function failed.\n");
-    ExitProcess(GetLastError());
+		printf("\n ERROR: FindFirstChangeNotification function failed.\n");
+		goCallbackFileSomeError();
+		return;
+    //ExitProcess(GetLastError());
   }
   if ( handle == NULL ) {
-    printf("\n ERROR: Unexpected NULL from FindFirstChangeNotification.\n");
-    ExitProcess(GetLastError());
+		printf("\n ERROR: Unexpected NULL from FindFirstChangeNotification.\n");
+		goCallbackFileSomeError();
+    //ExitProcess(GetLastError());
   }
   while (TRUE) {
     // printf("\nWaiting for notification...\n");
@@ -42,8 +46,9 @@ static inline void WatchDirectory(const char* dir) {
         // printf("\nNo changes in the timeout period.\n");
         break;
       default:
-        printf("\n ERROR: Unhandled status.\n");
-        ExitProcess(GetLastError());
+				printf("\n ERROR: Unhandled status.\n");
+				goCallbackFileSomeError();
+        //ExitProcess(GetLastError());
         break;
     }
   }
@@ -51,8 +56,9 @@ static inline void WatchDirectory(const char* dir) {
 */
 import "C"
 import (
+	"log"
 	"os"
-	"path/filepath"
+	"time"
 	"unsafe"
 )
 
@@ -70,13 +76,7 @@ var snap Snapshot
 // and a FileInfo channel for the callback notofications
 // Notofication is fired each time file in the directory is changed or some new
 // file (or sub-directory) is created
-func DirectoryChangeNotification(path string, callbackChan chan os.FileInfo) {
-
-	snap = Snapshot{
-		CallbackChan: callbackChan,
-		Root:         path,
-		DirSnapshot:  createSnapshot(path),
-	}
+func DirectoryChangeNotification(path string) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -85,35 +85,13 @@ func DirectoryChangeNotification(path string, callbackChan chan os.FileInfo) {
 
 //export goCallbackFileChange
 func goCallbackFileChange() {
-	fileInfo := findChange()
-	if fileInfo != nil {
-		snap.CallbackChan <- fileInfo
-	}
+	log.Print("Directory changed....")
+	time.Sleep(1 * time.Second)
+	process_dir(conf.MonitoringDir)
+	model.ResetRows()
 }
 
-func findChange() os.FileInfo {
-	var fileInfo os.FileInfo
-	filepath.Walk(snap.Root, func(file string, f os.FileInfo, err error) error {
-		if _, ok := snap.DirSnapshot[file]; !ok {
-			snap.DirSnapshot[file] = f
-			fileInfo = f
-			return nil
-		}
-		if snap.DirSnapshot[file].Size() != f.Size() {
-			snap.DirSnapshot[file] = f
-			fileInfo = f
-			return nil
-		}
-		return nil
-	})
-	return fileInfo
-}
-
-func createSnapshot(path string) map[string]os.FileInfo {
-	fileList := make(map[string]os.FileInfo)
-	filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
-		fileList[path] = f
-		return nil
-	})
-	return fileList
+//export goCallbackFileSomeError
+func goCallbackFileSomeError() {
+	log.Print("WARNING! Some problem for monitoring directory. Is directory '" + conf.MonitoringDir + "' exist?")
 }

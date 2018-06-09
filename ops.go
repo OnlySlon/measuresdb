@@ -58,7 +58,7 @@ func OpsRegister() {
 			},
 		}
 		torad = &Operator{
-			Name:          "torad",
+			Name: "	",
 			Precedence:    0,
 			Associativity: L,
 			Args:          1,
@@ -145,7 +145,7 @@ func OpsRegister() {
 			},
 		}
 		tand = &Operator{
-			Name:          "Tan",
+			Name: "TanD	",
 			Precedence:    0,
 			Associativity: L,
 			Args:          1,
@@ -254,6 +254,15 @@ func OpsRegister() {
 				return math.Abs(args[0])
 			},
 		}
+		sum = &Operator{
+			Name:          "sum",
+			Precedence:    0,
+			Associativity: L,
+			Args:          2,
+			Operation: func(args []float64) float64 {
+				return args[0] + args[1]
+			},
+		}
 	)
 	RegisterFunc(phdelta)
 	RegisterFunc(torad)
@@ -277,6 +286,7 @@ func OpsRegister() {
 	RegisterFunc(mag)
 	RegisterFunc(phd)
 	RegisterFunc(abs)
+	RegisterFunc(sum)
 
 	var (
 		add = &Operator{

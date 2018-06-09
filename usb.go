@@ -55,10 +55,10 @@ func (usb *USB) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintp
 		case winC.DBT_DEVICEARRIVAL:
 			{
 				log.Printf("USB Connected -> %v", msg)
-				log.Print(notificationFilter.Dbcc_name)
-				time.Sleep(1 * time.Second)
-				var data_lookup = "d:/"
-				process_dir(data_lookup)
+				//				log.Print(notificationFilter.Dbcc_name)
+				time.Sleep(2 * time.Second)
+				//				var data_lookup = "co"
+				process_dir(conf.UsbDriveLetter)
 				model.ResetRows()
 			}
 		case winC.DBT_DEVICEREMOVECOMPLETE:
